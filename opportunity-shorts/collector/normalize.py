@@ -176,8 +176,15 @@ def extract_experience(text: str) -> str:
     if not text:
         return ""
     for m in _EXP_RE.finditer(text):
-        around = text[max(0, m.start() - 60): m.end() + 60].lower()
-        if "experience" not in around:
+        before = re.split(r'[\n.;!?]', text[max(0, m.start() - 60):m.start()])[-1]
+        after = re.split(r'[\n.;!?]', text[m.end():m.end() + 80])[0]
+        # Academic duration is not required work experience merely because
+        # "experience" appears nearby in an alternative qualification.
+        if re.match(r'\s*(?:of\s+)?(?:university|college|school|education|study|studies|degree)\b', after, re.I):
+            continue
+        following = re.match(r'\s*(?:of\s+)?(?:[\w-]+\s+){0,5}experience\b', after, re.I)
+        preceding = re.search(r'\bexperience(?:\s+required)?\s*[:=-]?\s*(?:of\s+)?$', before, re.I)
+        if not following and not preceding:
             continue
         lo, plus, hi = m.group(1), m.group(2), m.group(3)
         if hi:

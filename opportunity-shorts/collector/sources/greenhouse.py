@@ -18,9 +18,11 @@ class GreenhouseSource(Source):
                                params={"content": "true"})
         out = []
         for j in (data or {}).get("jobs", []):
-            loc_parts = [(j.get("location") or {}).get("name", "")]
-            loc_parts += [o.get("name", "") for o in (j.get("offices") or []) if isinstance(o, dict)]
-            location = "; ".join(dict.fromkeys(p for p in loc_parts if p))
+            # Office metadata describes company offices, not necessarily this job's work arrangement.
+            location = ((j.get("location") or {}).get("name") or '').strip()
+            if not location:
+                location = '; '.join(dict.fromkeys(o.get('name', '') for o in (j.get('offices') or [])
+                                                   if isinstance(o, dict) and o.get('name')))
             depts = ", ".join(d.get("name", "") for d in (j.get("departments") or []) if isinstance(d, dict))
             out.append(Opportunity(
                 source=self.name, board=self.key(cfg), external_id=str(j.get("id")),

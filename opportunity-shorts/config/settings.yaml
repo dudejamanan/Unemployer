@@ -1,5 +1,5 @@
 # Collector settings. Env vars OPP_USER_AGENT / OPP_DB_PATH override the first two.
-user_agent: "OpportunityShortsBot/0.1 (+mailto:you@example.com)"   # put a real contact; polite bots get fewer blocks
+user_agent: "UnemployerBot/0.1 (+mailto:you@example.com)"   # put a real contact; polite bots get fewer blocks
 db_path: "data/opportunities.db"
 request_timeout: 25
 min_delay_seconds: 0.7        # pause between requests to the same host

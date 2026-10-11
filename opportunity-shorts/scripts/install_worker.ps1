@@ -12,6 +12,6 @@ $taskAction = New-ScheduledTaskAction -Execute $taskPythonPath -Argument ('"' + 
 $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 $taskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
 $taskPrincipal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName 'OpportunityShortsWorker' -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
-Start-ScheduledTask -TaskName 'OpportunityShortsWorker'
+Register-ScheduledTask -TaskName 'UnemployerWorker' -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
+Start-ScheduledTask -TaskName 'UnemployerWorker'
 Write-Output 'Worker installed and started. Log: data/opportunities.worker.log. The computer must stay awake and connected.'

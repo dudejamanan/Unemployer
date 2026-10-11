@@ -88,6 +88,49 @@ def test_uncertain_upload_is_locked(pipeline, monkeypatch):
         p.upload(p.test_id)
 
 
+def test_rejected_upload_is_deferred_without_uncertain_lock(pipeline, monkeypatch):
+    import httplib2
+    from googleapiclient.errors import HttpError
+    p = pipeline
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.db.set_status(p.test_id, 'approved')
+    p.approve_video(p.test_id)
+    error = HttpError(httplib2.Response({'status': '403'}), b'{"error":{"errors":[{"reason":"quotaExceeded"}],"message":"quota"}}')
+    monkeypatch.setattr('shorts.upload.upload_video', Mock(side_effect=error))
+    with pytest.raises(HttpError):
+        p.upload(p.test_id)
+    assert p.posts.get(p.test_id).status == 'ready'
+    retry = p.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (p.test_id,)).fetchone()
+    assert datetime.fromisoformat(retry[0]).date() > datetime.now(IST).date()
+
+
+def test_online_backup_is_restorable_and_closed(pipeline):
+    import sqlite3
+    from shorts.production import backup_database
+    target = backup_database(pipeline.collector_settings['db_path'])
+    connection = sqlite3.connect(target)
+    try:
+        assert connection.execute('SELECT COUNT(*) FROM opportunities').fetchone()[0] == 1
+        assert connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    finally:
+        connection.close()
+    assert backup_database(pipeline.collector_settings['db_path']) == target
+
+
+def test_public_metrics_readback(pipeline):
+    from shorts.production import sync_statistics
+    p = pipeline
+    p.posts.upsert(__import__('shorts.models', fromlist=['PostRecord']).PostRecord(p.test_id, '{}', youtube_id='abcdefghijk', status='posted'))
+    service = Mock()
+    service.videos().list().execute.return_value = {'items': [{'id': 'abcdefghijk',
+        'statistics': {'viewCount': '42', 'likeCount': '3'}, 'status': {'privacyStatus': 'public', 'uploadStatus': 'processed'}}]}
+    report = sync_statistics(p, service)
+    assert report['videos'][0]['views'] == 42
+    assert report['videos'][0]['likes'] == 3
+    assert 'Retention' in report['limits']
+
+
 def test_expired_closed_and_scam_rejected(pipeline):
     p = pipeline
     for assignment in ("deadline='2000-01-01'", "deadline=NULL, is_open=0", "is_open=1, description='registration fee required'"):
@@ -95,6 +138,20 @@ def test_expired_closed_and_scam_rejected(pipeline):
         p.db.conn.commit()
         with pytest.raises(ValueError):
             p.build(p.test_id)
+
+
+def test_automatic_upload_requires_recent_source_check(pipeline, monkeypatch):
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.db.conn.execute("UPDATE opportunities SET last_seen_at='2000-01-01T00:00:00Z' WHERE id=?", (p.test_id,))
+    p.db.conn.commit()
+    upload = Mock()
+    monkeypatch.setattr('shorts.upload.upload_video', upload)
+    with pytest.raises(ValueError, match='stale'):
+        p.upload(p.test_id)
+    upload.assert_not_called()
 
 
 def test_edited_script_requires_reapproval(pipeline, monkeypatch):
@@ -209,6 +266,56 @@ def test_automatic_changed_facts_regenerate(pipeline, monkeypatch):
     p.build(p.test_id)
     assert tts.call_count == 2
     assert 'Mumbai' in p.posts.get(p.test_id).script_json
+
+
+def test_immediate_publishes_new_video_in_same_cycle(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    mock_media(monkeypatch)
+    monkeypatch.setattr('shorts.upload.youtube_service', Mock())
+    monkeypatch.setattr('shorts.upload.reconcile_pending', lambda *args: [])
+    upload = Mock(return_value='abcdefghijk')
+    monkeypatch.setattr('shorts.upload.upload_video', upload)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []}, upload=True)
+    assert result['generated'] == [p.test_id]
+    assert result['uploaded'] == ['abcdefghijk']
+    assert not result['errors']
+    assert p.posts.conn.execute('SELECT COUNT(*) FROM schedules').fetchone()[0] == 0
+    upload.assert_called_once()
+
+
+def test_immediate_drains_future_queue_and_keeps_idempotency(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    schedule(p, p.test_id, (datetime.now(IST) + timedelta(days=1)).isoformat())
+    monkeypatch.setattr('shorts.upload.youtube_service', Mock())
+    monkeypatch.setattr('shorts.upload.reconcile_pending', lambda *args: [])
+    upload = Mock(return_value='abcdefghijk')
+    monkeypatch.setattr('shorts.upload.upload_video', upload)
+    empty = lambda: {'generated': [], 'uploaded': [], 'errors': []}
+    assert run_automatic(p, empty(), upload=True)['uploaded'] == ['abcdefghijk']
+    assert not run_automatic(p, empty(), upload=True)['uploaded']
+    upload.assert_called_once()
+
+
+def test_immediate_stops_generation_at_daily_quota(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    from datetime import timezone
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    p.settings['upload']['daily_limit'] = 1
+    p.posts.conn.execute('INSERT INTO upload_attempts VALUES (?, ?, ?, ?)',
+        ('other', 'other', 'role', datetime.now(IST).astimezone(timezone.utc).isoformat()))
+    p.posts.conn.commit()
+    build = Mock()
+    monkeypatch.setattr(p, 'build', build)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []})
+    assert not result['generated']
+    build.assert_not_called()
 
 
 def test_automatic_failed_item_is_deferred(pipeline, monkeypatch):

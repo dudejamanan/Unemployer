@@ -1,5 +1,5 @@
 """One-shot runner intended for Windows Task Scheduler or cron."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collector.config import load_boards, load_sources_cfg
 from collector.pipeline import run_collection
 from collector.http_client import HttpClient
@@ -84,6 +84,7 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
     from pathlib import Path
     import json
     now = datetime.now(IST)
+    immediate = pipeline.settings['automation'].get('publishing_mode') == 'immediate'
     # Remove invalid queue entries even while channel access is unavailable.
     for scheduled in pipeline.posts.conn.execute('SELECT opportunity_id FROM schedules').fetchall():
         row = pipeline.db.get(scheduled['opportunity_id'])
@@ -99,19 +100,31 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             result['errors'].append('YouTube connection: ' + str(exc))
             upload = False
     for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
-        if datetime.fromisoformat(row['scheduled_at']) > now or not (upload or manual_export):
+        retry = pipeline.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (row['opportunity_id'],)).fetchone()
+        if retry and datetime.fromisoformat(retry['retry_after']) > now:
+            continue
+        if (not immediate and datetime.fromisoformat(row['scheduled_at']) > now) or not (upload or manual_export):
             continue
         try:
             card = pipeline.card(row['opportunity_id'])
             manifest = Path(pipeline.settings['paths']['output_dir']) / card['id'] / 'manifest.json'
-            if not manifest.exists() or json.loads(manifest.read_text())['facts'] != fact_digest(card):
-                pipeline.build(card['id'], force=True)
+            pipeline.build(card['id'])
             value = pipeline.upload(card['id'], manual_export=manual_export)
             result['uploaded'].append(str(value))
             pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (card['id'],))
             pipeline.posts.conn.commit()
         except Exception as exc:
             result['errors'].append(f"{row['opportunity_id']}: {exc}")
+    if immediate:
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        end = (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).astimezone(timezone.utc)
+        attempted = pipeline.posts.conn.execute(
+            'SELECT COUNT(*) FROM upload_attempts WHERE attempted_at>=? AND attempted_at<?',
+            (start.isoformat(), end.isoformat())).fetchone()[0]
+        limit = min(int(pipeline.settings['upload']['daily_limit']),
+                    int(pipeline.settings['upload'].get('api_daily_upload_limit', 100)))
+        if attempted >= limit:
+            return result
     if pipeline.settings['llm'].get('provider') == 'ollama':
         import requests
         try:
@@ -147,8 +160,10 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
         role_key = (row['company'].lower(), row['title'].lower())
         if role_key in used_roles and not (post and post.status == 'ready'):
             continue
-        slots = []
+        slots = [now] if immediate else []
         for days in range(8):
+            if immediate:
+                break
             for slot in pipeline.settings['upload']['ist_slots']:
                 hour, minute = map(int, slot.split(':'))
                 candidate = (now + timedelta(days=days)).replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -161,10 +176,24 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
         try:
             pipeline.build(row['id'])
             timestamp = min(slots)
-            schedule(pipeline, row['id'], timestamp.isoformat())
+            if immediate:
+                pipeline.posts.conn.execute(
+                    'INSERT INTO schedules VALUES (?, ?) ON CONFLICT(opportunity_id) DO UPDATE SET scheduled_at=excluded.scheduled_at',
+                    (row['id'], timestamp.isoformat()))
+                pipeline.posts.conn.commit()
+            else:
+                schedule(pipeline, row['id'], timestamp.isoformat())
             occupied.add(timestamp.isoformat())
             used_roles.add(role_key)
             result['generated'].append(row['id'])
+            if immediate and (upload or manual_export):
+                try:
+                    value = pipeline.upload(row['id'], manual_export=manual_export)
+                    result['uploaded'].append(str(value))
+                    pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (row['id'],))
+                    pipeline.posts.conn.commit()
+                except Exception as exc:
+                    result['errors'].append(f"{row['id']}: {exc}")
         except Exception as exc:
             from .models import PostRecord
             previous = pipeline.posts.get(row['id'])
@@ -175,11 +204,13 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
 
 
 def run_daemon(config_dir=None, upload=True):
-    """Single local worker; collection every six hours, due publishing every minute."""
+    """Single local worker with configurable collection and immediate publishing."""
     import json
     import logging
     import time
     import os
+    from logging.handlers import RotatingFileHandler
+    from .production import atomic_json, backup_database, sync_statistics
     from pathlib import Path
     from .settings import load_shorts_settings
     from collector.config import load_settings
@@ -202,22 +233,45 @@ def run_daemon(config_dir=None, upload=True):
             raise ValueError('Enable automation in shorts.yaml before starting the daemon')
         log = logging.getLogger('shorts.worker')
         log_path = lock_path.with_suffix('.log')
-        handler = logging.FileHandler(log_path, encoding='utf-8')
+        handler = RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=3, encoding='utf-8')
         log.addHandler(handler)
         log.setLevel(logging.INFO)
         log.info('Worker started: automatic mode, model=%s, public upload requested=%s',
                  settings['llm']['model'], upload)
         next_collection = 0
+        next_maintenance = 0
+        health_path = lock_path.parent / 'worker-health.json'
         while True:
             collect = time.monotonic() >= next_collection
+            atomic_json(health_path, {'state': 'working', 'cycle_started_at': datetime.now(timezone.utc).isoformat(), 'collecting': collect})
             try:
+                if time.monotonic() >= next_maintenance:
+                    backup_database(load_settings(config_dir)['db_path'])
+                    metrics_pipeline = Pipeline(config_dir)
+                    try:
+                        if upload:
+                            report = sync_statistics(metrics_pipeline)
+                            atomic_json(lock_path.parent / 'performance.json', report)
+                    except Exception as exc:
+                        log.warning('Metrics sync unavailable: %s', exc)
+                    finally:
+                        metrics_pipeline.close()
+                    next_maintenance = time.monotonic() + 6*60*60
+                if collect:
+                    # Publish pending videos before a potentially slow source refresh.
+                    pending = run_daily(config_dir, collect=False, upload=upload)
+                    log.info(json.dumps(pending))
                 result = run_daily(config_dir, collect=collect, upload=upload)
                 log.info(json.dumps(result))
+                atomic_json(health_path, {'state': 'idle', 'last_completed_at': datetime.now(timezone.utc).isoformat(),
+                                         'generated': len(result['generated']), 'uploaded': len(result['uploaded']), 'errors': result['errors']})
                 import sys
                 if sys.stdout is not None:
                     print(json.dumps(result), flush=True)
             except Exception:
                 log.exception('Worker cycle failed; retrying next minute')
+                atomic_json(health_path, {'state': 'error', 'last_completed_at': datetime.now(timezone.utc).isoformat(),
+                                         'message': 'Worker cycle failed; see rotating worker log.'})
             if collect:
-                next_collection = time.monotonic() + 6 * 60 * 60
+                next_collection = time.monotonic() + max(1, int(settings['automation'].get('collection_interval_minutes', 15))) * 60
             time.sleep(60)

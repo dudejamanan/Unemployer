@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS upload_attempts (
 CREATE TABLE IF NOT EXISTS schedules (
     opportunity_id TEXT PRIMARY KEY, scheduled_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS upload_retries (
+    opportunity_id TEXT PRIMARY KEY, retry_after TEXT NOT NULL, reason TEXT
+);
 """
 
 
@@ -42,7 +45,8 @@ class PostStore:
     def __init__(self, path: str):
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, timeout=30)
+        self.conn.execute('PRAGMA journal_mode=WAL')
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
 

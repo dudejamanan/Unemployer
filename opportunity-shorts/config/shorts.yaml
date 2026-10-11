@@ -5,17 +5,20 @@
 llm:
   provider: ollama
   base_url: http://127.0.0.1:11434
-  model: qwen3:1.7b
+  model: qwen3:8b
   temperature: 0.6
   max_retries: 2
-  timeout_seconds: 120
+  timeout_seconds: 300
   fallback_on_failure: false
   num_ctx: 4096
+  num_gpu: 0  # CPU mode avoids the observed local CUDA/PTX failure.
 
 automation:
   enabled: true
   max_builds_per_run: 3
   interval_minutes: 30
+  collection_interval_minutes: 15
+  publishing_mode: immediate
 
 # Voice settings (edge-tts)
 # Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices
@@ -27,7 +30,7 @@ voices:
 # Script constraints
 script:
   min_words: 55
-  max_words: 85
+  max_words: 70
   target_duration_seconds: 25  # Target 20-35s, aim for middle
   max_title_chars: 100
   hinglish_enabled: true  # Allow light Hinglish in Latin script
@@ -39,25 +42,34 @@ theme:
   min_font_size: 56
   max_words_per_line: 7
   color_schemes:
-    - name: blue
-      primary: "#1a365d"
-      secondary: "#2b6cb0"
-      accent: "#4299e1"
+    - name: navy
+      primary: "#101b28"
+      secondary: "#172635"
+      accent: "#6ef2b5"
       text: "#ffffff"
       background: "#f7fafc"
-    - name: purple
-      primary: "#44337a"
-      secondary: "#6b46c1"
-      accent: "#9f7aea"
+    - name: forest
+      primary: "#132a27"
+      secondary: "#1b3934"
+      accent: "#6ef2b5"
       text: "#ffffff"
       background: "#faf5ff"
+
+assembly:
+  subtle_motion: true
+captions:
+  highlight_words: true
+
+business:
+  contact_email: mananndudeja@gmail.com
+  hub_url: "https://unemployer.syrupytide17.chatgpt.site"
 
 # Upload and scheduling
 upload:
   privacy: public
   contains_synthetic_media: true
   api_daily_upload_limit: 100
-  daily_limit: 3  # Max uploads per day (quota-aware)
+  daily_limit: 100  # Publish immediately, subject to project/channel quota.
   ist_slots:
     - "08:00"
     - "13:00"

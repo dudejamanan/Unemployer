@@ -208,12 +208,28 @@ def test_ollama_request_and_response(monkeypatch):
     assert 'Authorization' not in post.call_args.kwargs
 
 
+def test_ollama_cannot_replace_structured_listing_facts(monkeypatch):
+    import json
+    from unittest.mock import Mock
+    settings = load_shorts_settings()
+    payload = _template_fallback(CARD_INTERNSHIP_WITH_STIPEND, settings).to_dict()
+    payload['on_screen']['stipend'] = 'Rs 999,999 per month'
+    payload['description'] = 'https://unofficial.example/apply'
+    response = Mock()
+    response.json.return_value = {'message': {'content': json.dumps(payload)}}
+    monkeypatch.setattr('requests.post', Mock(return_value=response))
+    script = generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
+    assert script.on_screen.stipend == CARD_INTERNSHIP_WITH_STIPEND['stipend']
+    assert script.description.splitlines()[0] == CARD_INTERNSHIP_WITH_STIPEND['apply_url']
+    assert len(script.hashtags) == len(set(script.hashtags))
+
+
 def test_invalid_ollama_facts_retry_then_fail(monkeypatch):
     import json
     from unittest.mock import Mock
     settings = load_shorts_settings()
     script = _template_fallback(CARD_INTERNSHIP_WITH_STIPEND, settings)
-    script.on_screen.stipend = 'Rs 999,999 per month'
+    script.voiceover_lines[1].text += ' Salary Rs 999,999 per month.'
     response = Mock()
     response.json.return_value = {'message': {'content': json.dumps(script.to_dict())}}
     post = Mock(return_value=response)

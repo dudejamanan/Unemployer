@@ -1,4 +1,4 @@
-﻿# Opportunity Shorts
+﻿# Unemployer
 
 An end-to-end system that collects Indian-eligible internships and fresher jobs, writes original scripts with local Ollama, produces captioned vertical videos, and schedules YouTube uploads.
 
@@ -6,18 +6,18 @@ The current configuration uses automatic processing for **@unemployerr**: collec
 
 ## Current setup
 
-The Windows **OpportunityShortsWorker** task is installed and started. YouTube authorization has not been supplied, so nothing has been uploaded. The installed 8B local model ran out of memory; a smaller `qwen3:1.7b` download was started. Free sufficient RAM and finish the model download to enable live inference.
+The Windows **UnemployerWorker** task is installed. YouTube channel authorization is saved; the automatic worker handles scheduled uploads. After freeing memory, the installed `qwen3:8b` model successfully ran in CPU mode; GPU attempts failed with a CUDA/PTX error. The active configuration uses CPU mode and no paid LLM API key.
 
 See [automatic setup and YouTube connection](docs/AUTOMATION.md), [reference-channel growth audit](docs/GROWTH.md), and [source inventory](docs/SOURCES.md).
 
 ## Start here
 
-Run from the inner opportunity-shorts directory:
+Run from the project directory:
 
 ```powershell
 python -m pip install -r requirements.txt
 python -m playwright install chromium
-ollama pull qwen3:1.7b
+ollama list
 python -m shorts doctor
 python -m pytest -q
 ```
@@ -38,7 +38,7 @@ The dashboard can show opportunities and video previews, edit scripts, reject li
 - Collector: 23 configured company-board/public-catalogue/employer-page targets, Indian-applicant eligibility and early-career filtering, scoring, SQLite storage, change/closure tracking.
 - Scripts: local Ollama JSON responses, light Hinglish preference, varied factual openings, original contextual guidance, relevant hashtags and automatic validation.
 - Media: cached Indian voices, four HTML scenes, layout/color variations, safe areas, ASS captions, normalized audio and FFmpeg H.264/AAC output.
-- Automation: six-hour collection, bounded generation queue, minute-by-minute due publishing, three IST slots, daily caps, cached builds, stale-content regeneration, channel identity checks and uncertain-upload recovery.
+- Automation: 15-minute source refreshes, bounded generation, immediate publishing of active queued/new videos, daily caps, cached builds, stale-content regeneration, channel identity checks and uncertain-upload recovery.
 
 ## Commands
 
@@ -51,10 +51,19 @@ python -m shorts run-daily --upload
 python -m shorts daemon
 ```
 
-The installed worker and foreground daemon must not run together. Keep the computer awake and connected. Public-upload visibility and live OAuth publication still need verification after authorization. There is no promise of channel growth, monetization approval or earnings.
+The installed worker and foreground daemon must not run together. Keep the computer awake and connected. Real public uploads and live OAuth publishing have been verified. There is no promise of channel growth, monetization approval or earnings.
 
 - [Operating notes](docs/END_TO_END.md)
 - [Growth findings](docs/GROWTH.md)
 - [Automatic operation](docs/AUTOMATION.md)
 - [Card contract](docs/DATA_CONTRACT.md)
 - [Earlier @ashishcode source audit](docs/CHANNEL_SOURCES.md)
+
+
+## Production upgrade
+
+The public application hub is live at https://unemployer.syrupytide17.chatgpt.site. It includes live employer/catalogue feeds, source redirects, a free application checklist and a sponsorship contact. Add it to your YouTube channel profile links so Shorts viewers can reach it.
+
+New videos include the logo, responsibilities-focused narration, original role-specific application recommendations, caption highlighting and subtle motion. Production operations include rotating worker logs, cycle health reports, seven daily database backups, explicit upload-rejection cooldowns and public YouTube performance snapshots. Run `python -m shorts health`, `python -m shorts metrics --refresh`, or `python -m shorts backup`.
+
+See [production and revenue operations](docs/PRODUCTION.md). Advertising approval, payments, sponsorship deals and revenue are not guaranteed or automatically activated by these changes.

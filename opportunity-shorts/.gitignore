@@ -3,6 +3,9 @@ data/*.json
 data/source_probes/
 data/*.worker.log
 data/*.worker.lock
+data/backups/
+data/pytest*/
+data/*.log.*
 data/worker-console.log
 data/worker-start-error.txt
 __pycache__/

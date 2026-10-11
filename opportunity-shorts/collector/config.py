@@ -9,7 +9,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_SETTINGS = {
-    "user_agent": "OpportunityShortsBot/0.1 (+mailto:you@example.com)",
+    "user_agent": "UnemployerBot/0.1 (+mailto:you@example.com)",
     "db_path": "data/opportunities.db",
     "request_timeout": 25,
     "min_delay_seconds": 0.7,

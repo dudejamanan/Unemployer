@@ -1,0 +1,61 @@
+"""Original editorial recommendations, distinguished from employer requirements."""
+import hashlib
+import re
+
+VERSION = 'unemployer-editorial-2'
+HUB_URL = 'https://unemployer.syrupytide17.chatgpt.site'
+
+
+def application_tip(role):
+    role = role.casefold()
+    choices = [
+        (r'python', 'Application tip: show a Python project and explain what you built yourself.'),
+        (r'sql|data analy', 'Application tip: show how you cleaned data and explained the result of your analysis.'),
+        (r'data scien|machine learning', 'Application tip: explain your model evaluation and the limitations of your dataset.'),
+        (r'software|developer|engineering', 'Application tip: link a relevant project and explain a technical decision you made.'),
+        (r'marketing|social media|content', 'Application tip: share a relevant writing or campaign sample and explain the intended audience.'),
+        (r'design|ui|ux', 'Application tip: show a case study that explains your design choices, not just the final screens.'),
+        (r'finance|account|business', 'Application tip: show a relevant analysis and explain how you checked your work.'),
+    ]
+    return next((tip for pattern, tip in choices if re.search(pattern, role)),
+                'Application tip: match your strongest project or experience to the responsibilities in the listing.')
+
+
+def hook_variant(card):
+    return int(hashlib.sha256(str(card.get('id') or card['apply_url']).encode()).hexdigest()[:8], 16) % 4
+
+
+def role_context(description):
+    text = str(description)
+    match = re.search(r'responsibilities|what you.ll do|qualifications|requirements', text, re.I)
+    text = text[match.start():match.start()+2400] if match else text[:2400]
+    # Raw durations and historical batch dates are not normalized card facts.
+    return '\n'.join(line for line in text.splitlines() if not re.search(r'\d', line))[:1800]
+
+
+def tighten_narration(script, card, maximum=80):
+    """Keep complete generated sentences, a factual opening and useful advice."""
+    from .models import VoiceoverLine
+    opening = f"{card['company']} is hiring: {card['role']}."
+    tip = application_tip(card['role'])
+    cta = 'Copy the application link from the description.'
+    budget = maximum - len((opening + ' ' + tip + ' ' + cta).split())
+    body = []
+    for line in script.voiceover_lines:
+        for sentence in re.split(r'(?<=[.!?])\s+', line.text):
+            if any(term in sentence.casefold() for term in
+                   (card['company'].casefold(), 'application tip', 'apply link', 'application link',
+                    'check the official', 'match your skills', 'read the responsibilities')):
+                continue
+            words = len(sentence.split())
+            if words <= budget and sentence.strip():
+                body.append(sentence)
+                budget -= words
+    script.hook = opening
+    if len((opening + ' ' + ' '.join(body) + ' ' + tip + ' ' + cta).split()) < 55:
+        reminder = 'Before applying, check the responsibilities and tailor your résumé honestly to the role.'
+        if len(reminder.split()) <= budget:
+            body.append(reminder)
+    script.voiceover_lines = [VoiceoverLine(text=opening), *[VoiceoverLine(text=x) for x in body],
+                             VoiceoverLine(text=tip), VoiceoverLine(text=cta)]
+    return script

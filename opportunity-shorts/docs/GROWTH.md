@@ -1,6 +1,6 @@
 # Unemployer: public channel audit and content strategy
 
-Audited October 11, 2026: 12 recent public video pages from each of the five requested channels (60 videos, all 60 descriptions available). This sample is predominantly long-form content. It is not a complete history, a Shorts-only study, a thumbnail review, or access to private click-through, retention, revenue or traffic-source analytics. View totals depend on video age and existing audiences; they do not prove which title or hashtag caused growth.
+Audited October 11, 2026: 12 recent public video pages from each of the five requested channels plus Ashishcode (72 videos). This sample is predominantly long-form content. It is not a complete history, a Shorts-only study, a thumbnail review, or access to private click-through, retention, revenue or traffic-source analytics. View totals depend on video age and existing audiences; they do not prove which title or hashtag caused growth.
 
 | Reference | Observed pattern | What this pipeline uses |
 | --- | --- | --- |
@@ -16,8 +16,8 @@ Example evidence: [government internship guide](https://www.youtube.com/watch?v=
 
 - Local Ollama receives the source card and generates original narration. The preferred language is light Hinglish, with permission in the prompt to use clear English when uncertain. This is a language preference, not a guarantee of perfect pronunciation or Hindi quality.
 - Four opening approaches vary by listing: employer/role, student question, location/remote work, or disclosed compensation. Facts control what can be claimed.
-- Titles remain within 100 characters, with 3–5 relevant hashtags rather than a copied keyword dump. The prompt excludes fabricated salaries, guaranteed selection, fake scarcity and unrelated creator branding.
-- The initial schedule is at most three daily uploads at 08:00, 13:00 and 19:00 IST. These are initial test times, not evidence that these channels use those times.
+- Titles remain within 100 characters, with 3â€“5 relevant hashtags rather than a copied keyword dump. The prompt excludes fabricated salaries, guaranteed selection, fake scarcity and unrelated creator branding.
+- Immediate mode publishes active queued videos and newly generated videos without waiting for fixed time slots. Sources refresh every 15 minutes after the previous refresh completes. The local worker checks queues between runs; generation, network time and YouTube quota affect delay. The configured limit is 100 attempts per IST day, subject to lower channel/project limits. YouTube sends at most three upload/live notifications per channel per 24 hours: https://support.google.com/youtube/answer/7457584.
 - Generation remains automatically checked for known facts, dates, numeric claims, URLs, layout and media duration. A failed item is deferred automatically; people do not need to approve it.
 
 The public metadata identifies [Unemployer](https://www.youtube.com/@unemployerr) as channel `UCh9aBTHwc9QyIhe5SflYtBQ`. No public video entries could be extracted from its `/videos` response, so no historical performance baseline or claim that the channel has zero content is made. OAuth verifies this exact channel ID before publishing.
@@ -33,3 +33,17 @@ The samples include long-form guides and products/community funnels; this implem
 External URLs in Shorts descriptions/comments are **not clickable**. The source URL is included as text, but conversion needs a useful application hub in a channel-profile link or an appropriate related long-form video. A hosted application hub has not been deployed. See [YouTube link behavior](https://support.google.com/youtube/answer/13748639).
 
 Diagnostic metadata is saved locally under ignored `data/source_probes/{talkpro,apna,babbar,internshala,saumya}.json`; rerun `scripts/channel_sources.py` deliberately rather than continuously scraping reference channels.
+
+
+## Refreshed audit and implemented attention patterns
+
+The six-channel public audit was refreshed during this change. Ashishcode's 12 sampled descriptions had no hashtags; titles emphasize employer + hiring + role. Apna College's 12 descriptions contain just one hashtag in total. These observations are evidence against treating a large hashtag list as necessary.
+
+Internshala uses #FresherJobs (7/12) and #Internship (5/12), plus narrow degree/role/work tags. Love Babbar uses #Coding (8/12), #Programming (6/12) and #SoftwareEngineering (4/12), matching the topic. Aman uses programme names, real deadlines and benefits. Saumya uses outcome-led titles and topic-specific tags alongside a personal brand tag.
+
+Applied: employer-led searchable titles; factual remote/compensation details; role tags including Python and DataAnalytics; #Unemployer as our own brand tag; source-linked descriptions; varied factual narration openings. No competitor brand tags, unsupported salary promises or invented scarcity. View counts are not causal evidence; private retention/CTR analytics remain unavailable. This is a titles/descriptions audit, not a full thumbnail or audiovisual review.
+
+Live publishing proof: five uploads were verified public and fully processed on YouTube: 5nSH7LjOFeA, YzIPxnhsm1c, LUIdpKQ-HKg, ywEyjdAeF_o and J0wdENm-Jrs.
+
+
+Production release: the live public hub is https://unemployer.syrupytide17.chatgpt.site. New narration is shortened using complete generated sentences, a factual employer/role opening and an original general application recommendation; source facts remain checked. New visual treatment adds the logo, section labels, word highlighting and gentle motion. Public metrics report observations only; no viral winner or causal performance claim is made. See PRODUCTION.md for operating and commercial limits.

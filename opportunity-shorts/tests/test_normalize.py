@@ -6,6 +6,14 @@ from collector.normalize import (classify_type, detect_location, extract_batch_y
 TODAY = date(2026, 10, 5)
 
 
+def test_academic_year_is_not_required_work_experience():
+    assert extract_experience('At least 1 year of university education, or equivalent work experience.') == ''
+    assert extract_experience('A 4 year degree. Previous internship experience is helpful.') == ''
+    assert extract_experience('At least 2 years of professional software development experience.') == '2 years'
+    assert extract_experience('Experience required: 0-2 years') == '0-2 years'
+    assert extract_experience('2+ years experience with Python') == '2+ years'
+
+
 def test_html_to_text_handles_escaped_greenhouse_html():
     out = html_to_text("&lt;p&gt;Hello &amp;amp; welcome&lt;/p&gt;&lt;ul&gt;&lt;li&gt;One&lt;/li&gt;&lt;li&gt;Two&lt;/li&gt;&lt;/ul&gt;")
     assert "Hello & welcome" in out and "- One" in out and "- Two" in out and "<" not in out

@@ -33,6 +33,25 @@ def cmd_generate(args):
         pipeline.close()
 
 
+def cmd_operations(args):
+    from .pipeline import Pipeline
+    from .production import backup_database, sync_statistics, performance_report, atomic_json
+    pipeline = Pipeline(args.config)
+    try:
+        if args.command == 'backup':
+            print(backup_database(pipeline.collector_settings['db_path']))
+        elif args.command == 'metrics':
+            report = sync_statistics(pipeline) if args.refresh else performance_report(pipeline)
+            atomic_json(Path(pipeline.collector_settings['db_path']).parent / 'performance.json', report)
+            print(json.dumps(report, indent=2))
+        else:
+            path = Path(pipeline.collector_settings['db_path']).parent / 'worker-health.json'
+            print(path.read_text() if path.exists() else '{"state":"not recorded"}')
+        return 0
+    finally:
+        pipeline.close()
+
+
 async def cmd_tts(args):
     """Generate TTS for a given text string."""
     settings = load_shorts_settings(args.config)
@@ -243,6 +262,11 @@ def main(argv=None) -> int:
         command.set_defaults(fn=cmd_pipeline)
     command = sub.add_parser('auth', help='Authorize the YouTube channel interactively')
     command.set_defaults(fn=cmd_pipeline)
+    for name in ('backup', 'health', 'metrics'):
+        command = sub.add_parser(name, help='Production operations: ' + name)
+        if name == 'metrics':
+            command.add_argument('--refresh', action='store_true')
+        command.set_defaults(fn=cmd_operations, command=name)
     command = sub.add_parser('run-daily', help='Collect and generate; optionally upload due reviewed schedules')
     command.add_argument('--no-collect', action='store_true')
     command.add_argument('--upload', action='store_true')

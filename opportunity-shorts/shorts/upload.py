@@ -31,6 +31,8 @@ def youtube_service(settings, interactive=False):
     from google.auth.transport.requests import Request
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
+    from google_auth_httplib2 import AuthorizedHttp
+    import httplib2
     token = Path(settings['youtube_token_file'])
     credentials = Credentials.from_authorized_user_file(str(token)) if token.exists() else None
     if credentials and not credentials.has_scopes(SCOPES):
@@ -46,7 +48,7 @@ def youtube_service(settings, interactive=False):
         credentials = InstalledAppFlow.from_client_secrets_file(secrets, SCOPES).run_local_server(port=0)
     token.parent.mkdir(parents=True, exist_ok=True)
     token.write_text(credentials.to_json(), encoding='utf-8')
-    service = build('youtube', 'v3', credentials=credentials, cache_discovery=False)
+    service = build('youtube', 'v3', http=AuthorizedHttp(credentials, http=httplib2.Http(timeout=30)), cache_discovery=False)
     expected = settings['upload'].get('expected_channel_handle')
     expected_id = settings['upload'].get('expected_channel_id')
     if expected or expected_id:

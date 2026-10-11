@@ -14,10 +14,19 @@ from shorts.scheduler import schedule
 
 
 def main():
-    st.set_page_config(page_title='Opportunity Shorts Review', layout='wide')
-    st.title('Opportunity Shorts')
+    st.set_page_config(page_title='Unemployer Review', layout='wide')
+    st.title('Unemployer')
     pipeline = Pipeline(os.getenv('SHORTS_CONFIG_DIR'))
     try:
+        from shorts.production import performance_report
+        health_path = Path(pipeline.collector_settings['db_path']).parent / 'worker-health.json'
+        with st.expander('Operations and video performance'):
+            if health_path.exists():
+                st.json(json.loads(health_path.read_text()))
+            report = performance_report(pipeline)
+            if report['videos']:
+                st.dataframe(report['videos'], use_container_width=True)
+            st.caption(report['limits'])
         automatic = pipeline.settings['automation']['enabled']
         if automatic:
             st.info('Automatic mode: listings and videos need no manual approval. The worker generates and publishes scheduled videos.')

@@ -28,9 +28,9 @@ Do not use silent audio as a production fallback. When narration is outside 20â€
 the build fails with its measured duration; adjust the script or supply another recording.
 
 Script generation now uses local Ollama, not Anthropic. No paid LLM API key is used.
-The active model is qwen3:1.7b with a small context to reduce memory usage. The installed
-qwen3:8b failed due to insufficient memory; the smaller download and a successful inference
-must be completed before claiming the local-model pipeline is verified. Hinglish is preferred,
+The active model is the installed qwen3:8b with a 4,096-token context and CPU mode.
+After freeing memory, CPU inference and a real video build succeeded; GPU inference failed
+with a CUDA/PTX error. The smaller-model download was stopped. Hinglish is preferred,
 with English permitted for clarity. Failed scripts are deferred automatically. Numeric and
 field validation cannot establish all unrestricted prose claims as true.
 
@@ -130,7 +130,7 @@ Use Windows Task Scheduler: set **Start in** to the project directory and use th
 absolute Python executable. Create collection/generation triggers twice daily (e.g. 06:00
 and 18:00 IST) with arguments `-m shorts run-daily`. Create a runner every 15 minutes
 with arguments `-m shorts run-daily --no-collect --upload`. Set the task to avoid concurrent
-instances. The current-user OpportunityShortsWorker task is now installed; use that daemon instead of installing these older manual-mode tasks.
+instances. The current-user UnemployerWorker task is now installed; use that daemon instead of installing these older manual-mode tasks.
 Keep the machine awake and network connected for scheduled runs.
 
 ## Recovery and idempotency

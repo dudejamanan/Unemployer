@@ -82,7 +82,12 @@ def render_scene(
         font_css = f"@font-face {{font-family:ShortsFont;src:url(data:font/ttf;base64,{encoded})}}"
 
     # Prepare context
+    from ..editorial import application_tip
+    logo_path = Path(settings['paths']['assets_dir']) / 'branding' / 'unemployer-logo.png'
     context = {
+        'brand_logo': 'data:image/png;base64,' + base64.b64encode(logo_path.read_bytes()).decode('ascii') if logo_path.exists() else '',
+        'application_tip': application_tip(script.on_screen.role).removeprefix('Application tip: '),
+        'scene_label': {'hook': 'THE OPPORTUNITY', 'facts': 'KEY FACTS', 'deadline': 'APPLICATION TIP', 'cta': 'YOUR NEXT STEP'}[scene_type],
         "company": script.on_screen.company,
         "role": script.on_screen.role,
         "location": script.on_screen.location,

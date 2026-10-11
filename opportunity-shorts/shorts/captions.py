@@ -34,6 +34,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(str(t['word']) for t in group).replace('\\', '').replace('{', '').replace('}', '').replace('\n', ' ')
         if cfg['uppercase']:
             text = text.upper()
+        if cfg.get('highlight_words'):
+            pieces = []
+            for index, item in enumerate(group):
+                word = str(item['word']).replace('\\', '').replace('{', '').replace('}', '').replace('\n', ' ')
+                if cfg['uppercase']:
+                    word = word.upper()
+                following = group[index+1]['start'] if index+1 < len(group) else item['end']
+                duration = max(1, round((following-item['start'])*100))
+                pieces.append(r'{\kf' + str(duration) + r'\1c&H00B5F26E&\2c&H00FFFFFF&}' + word)
+            text = ' '.join(pieces)
         lines.append(f"Dialogue: 0,{_time(group[0]['start'])},{_time(group[-1]['end'])},Default,,0,0,0,,{text}\n")
     path.write_text(header + ''.join(lines), encoding='utf-8')
     return path

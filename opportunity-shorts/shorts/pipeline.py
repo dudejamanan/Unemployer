@@ -51,6 +51,11 @@ class Pipeline:
             raise ValueError('Opportunity was rejected')
         if approved and card['status'] != 'approved' and not self.settings['automation']['enabled']:
             raise ValueError('Explicit opportunity approval is required')
+        if approved and self.settings['automation']['enabled']:
+            checked = row['last_seen_at']
+            limit = int(self.settings['automation'].get('max_source_age_hours', 24))
+            if not checked or datetime.fromisoformat(checked.replace('Z', '+00:00')) < datetime.now(timezone.utc) - timedelta(hours=limit):
+                raise ValueError('Source listing is stale; refresh the collector before publishing')
         if SCAM_RE.search(card['role'] + '\n' + card['description']):
             raise ValueError('Suspicious fee, deposit, or messaging-only listing')
         url = urlparse(card['apply_url'])
@@ -87,6 +92,8 @@ class Pipeline:
                    json.loads(existing_manifest.read_text())['facts'] != fact_digest(card))
         llm_identity = {key: self.settings['llm'].get(key) for key in ('provider', 'model')}
         llm_identity['hinglish'] = self.settings['script'].get('hinglish_enabled', False)
+        from .editorial import VERSION, hook_variant
+        llm_identity['editorial'] = VERSION
         changed_generator = (self.settings['automation']['enabled'] and existing_manifest.exists() and
                              json.loads(existing_manifest.read_text()).get('llm') != llm_identity)
         script = ScriptDoc.from_dict(json.loads(post.script_json)) if post and post.script_json != '{}' and not changed and not changed_generator else self.script(card['id'])
@@ -95,7 +102,10 @@ class Pipeline:
             raise ValueError('; '.join(errors))
         folder = Path(self.settings['paths']['output_dir']) / card['id']
         folder.mkdir(parents=True, exist_ok=True)
-        digest = hashlib.sha256(json.dumps({'facts': fact_digest(card), 'llm': llm_identity, 'script': script.to_dict(), 'settings': {
+        templates = Path(__file__).parent / 'render' / 'templates'
+        renderer_digest = hashlib.sha256(b''.join(
+            path.read_bytes() for path in sorted(templates.glob('*.html')))).hexdigest()
+        digest = hashlib.sha256(json.dumps({'facts': fact_digest(card), 'llm': llm_identity, 'renderer': renderer_digest, 'script': script.to_dict(), 'settings': {
             key: self.settings[key] for key in ('voices', 'theme', 'assembly', 'captions')},
             'audio': str(audio_path) if audio_path else None}, sort_keys=True).encode()).hexdigest()
         manifest = folder / 'manifest.json'
@@ -129,7 +139,7 @@ class Pipeline:
             post.status = 'ready' if self.settings['automation']['enabled'] else 'generated'
             (folder / 'script.json').write_text(json.dumps(script.to_dict(), ensure_ascii=False, indent=2), encoding='utf-8')
             manifest.write_text(json.dumps({'digest': digest, 'facts': fact_digest(card), 'duration': audio.duration_seconds,
-                                           'llm': llm_identity}), encoding='utf-8')
+                                           'llm': llm_identity, 'hook_variant': hook_variant(card)}), encoding='utf-8')
             self.posts.upsert(post)
             return post
         except Exception as exc:
@@ -197,8 +207,21 @@ class Pipeline:
         try:
             youtube_id = upload_video(post, script, self.settings)
         except Exception as exc:
-            self.posts.update_status(card['id'], 'uploading', str(exc))
+            # Explicit rejection is safe to defer; a lost response remains locked.
+            from googleapiclient.errors import HttpError
+            if isinstance(exc, HttpError) and 400 <= exc.resp.status < 500 and exc.resp.status != 408:
+                self.posts.update_status(card['id'], 'ready', str(exc))
+                deferred = now + timedelta(hours=1)
+                if b'quotaExceeded' in exc.content or b'uploadLimitExceeded' in exc.content:
+                    deferred = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                conn.execute('INSERT OR REPLACE INTO upload_retries VALUES (?, ?, ?)',
+                             (card['id'], deferred.isoformat(), str(exc)[:500]))
+                conn.commit()
+            else:
+                self.posts.update_status(card['id'], 'uploading', str(exc))
             raise
+        conn.execute('DELETE FROM upload_retries WHERE opportunity_id=?', (card['id'],))
+        conn.commit()
         self.posts.set_youtube_id(card['id'], youtube_id)
         self.db.set_status(card['id'], 'posted')
         return youtube_id

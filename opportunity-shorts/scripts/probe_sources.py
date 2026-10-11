@@ -31,7 +31,7 @@ TARGETS = {
 def probe(item):
     name, url = item
     try:
-        response = requests.get(url, timeout=20, headers={'User-Agent': 'OpportunityShortsBot/0.1', 'Accept': '*/*'})
+        response = requests.get(url, timeout=20, headers={'User-Agent': 'UnemployerBot/0.1', 'Accept': '*/*'})
         suffix = 'json' if 'json' in response.headers.get('Content-Type', '') else 'html'
         folder = ROOT / 'data' / 'source_probes'
         folder.mkdir(parents=True, exist_ok=True)

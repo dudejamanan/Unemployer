@@ -10,6 +10,7 @@ class ValidationError(ValueError):
 
 
 def extract_numbers(text):
+    text = re.sub(r'https?://[^\s]+', '', text)
     return re.findall(r'\d+(?:[, .]\d+)*', text)
 
 
@@ -53,7 +54,7 @@ def validate_script(script: ScriptDoc, card: dict):
         except ValueError:
             errors.append('Card deadline must be YYYY-MM-DD')
     # Compare complete numeric tokens, not substrings (e.g. 8000 is not 80000).
-    numbers = lambda value: set(re.findall(r'\d+(?:,\d{3})*(?:\.\d+)?', value))
+    numbers = lambda value: set(re.findall(r'\d+(?:,\d{3})*(?:\.\d+)?', re.sub(r'https?://[^\s]+', '', value)))
     unsupported = numbers(text) - numbers(evidence)
     if unsupported:
         errors.append(f'Unsupported numbers: {sorted(unsupported)}')
@@ -84,7 +85,8 @@ def validate_script(script: ScriptDoc, card: dict):
     if not card.get('deadline') and script.on_screen.deadline_badge.casefold() != 'apply soon':
         errors.append('Unknown deadline must say Apply soon')
     urls = extract_urls(text)
-    if any(url != card.get('apply_url') for url in urls):
+    from .editorial import HUB_URL
+    if any(url not in (card.get('apply_url'), HUB_URL) for url in urls):
         errors.append('Script contains an unofficial URL')
     if not script.description.splitlines() or script.description.splitlines()[0] != card.get('apply_url'):
         errors.append('Description must start with the exact official application URL')
@@ -96,6 +98,7 @@ def validate_script(script: ScriptDoc, card: dict):
         errors.append('Description missing #Shorts')
     if not script.hook.strip():
         errors.append('Hook is empty')
-    if not script.voiceover_lines or 'apply link is in the description' not in script.voiceover_lines[-1].text.lower():
+    if not script.voiceover_lines or not any(cta in script.voiceover_lines[-1].text.lower() for cta in
+            ('apply link is in the description', 'copy the application link from the description')):
         errors.append('Voiceover must end with the apply-link CTA')
     return not errors, errors

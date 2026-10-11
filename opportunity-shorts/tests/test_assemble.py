@@ -88,4 +88,6 @@ def test_real_captioned_assembly_with_music(tmp_path):
         assert {stream['codec_name'] for stream in probe['streams']} == {'h264', 'aac'}
         assert probe['streams'][0]['width'] == 320
         assert 4.9 <= float(probe['format']['duration']) <= 5.2
-        assert 'OFFICIAL LISTING' in output.with_suffix('.ass').read_text()
+        import re
+        caption_text = re.sub(r'\{[^}]*\}', '', output.with_suffix('.ass').read_text())
+        assert 'OFFICIAL LISTING' in caption_text

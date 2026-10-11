@@ -37,7 +37,7 @@ def videos_in(value):
 
 
 def get(url):
-    response = requests.get(url, timeout=25, headers={'User-Agent': 'OpportunityShortsBot/0.1'})
+    response = requests.get(url, timeout=25, headers={'User-Agent': 'UnemployerBot/0.1'})
     response.raise_for_status()
     return response.text
 

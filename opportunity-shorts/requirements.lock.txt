@@ -1,0 +1,14 @@
+# Tested direct dependency versions; Python 3.14 on Windows.
+requests==2.34.2
+PyYAML==6.0.3
+beautifulsoup4==4.14.3
+pytest==9.0.2
+edge-tts==7.2.8
+playwright==1.63.0
+streamlit==1.53.1
+google-api-python-client==2.189.0
+google-auth-oauthlib==1.4.0
+google-auth==2.56.2
+google-auth-httplib2==0.3.0
+httplib2==0.31.2
+jinja2==3.1.6

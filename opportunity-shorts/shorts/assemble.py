@@ -60,6 +60,9 @@ def assemble_video(
     concat_file.write_text(content, encoding="utf-8")
     vf = (f"scale={cfg['width']}:{cfg['height']}:force_original_aspect_ratio=decrease,"
           f"pad={cfg['width']}:{cfg['height']}:(ow-iw)/2:(oh-ih)/2,fps={cfg['fps']}")
+    if cfg.get('subtle_motion'):
+        vf += (f",zoompan=z='min(zoom+0.00008,1.025)':x='iw/2-iw/zoom/2':"
+               f"y='ih/2-ih/zoom/2':d=1:s={cfg['width']}x{cfg['height']}:fps={cfg['fps']}")
     if word_timestamps:
         captions = output_path.with_suffix(".ass")
         write_captions(word_timestamps, captions, settings)
@@ -77,7 +80,7 @@ def assemble_video(
             "-crf", str(cfg["crf"]), "-c:a", "aac", "-b:a", cfg["audio_bitrate"],
             "-t", str(total_duration), "-movflags", "+faststart", str(output_path)]
     try:
-        subprocess.run(cmd, cwd=output_path.parent, stdin=subprocess.DEVNULL, capture_output=True, check=True)
+        subprocess.run(cmd, cwd=output_path.parent, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=600)
     finally:
         concat_file.unlink(missing_ok=True)
     return output_path
