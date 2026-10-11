@@ -18,6 +18,9 @@ def main():
     st.title('Opportunity Shorts')
     pipeline = Pipeline(os.getenv('SHORTS_CONFIG_DIR'))
     try:
+        automatic = pipeline.settings['automation']['enabled']
+        if automatic:
+            st.info('Automatic mode: listings and videos need no manual approval. The worker generates and publishes scheduled videos.')
         status = st.sidebar.selectbox('Queue', ['new', 'approved', 'rejected', 'posted'])
         from collector.config import load_boards, load_sources_cfg
         from collector.pipeline import build_targets
@@ -49,11 +52,11 @@ def main():
         for field in ('deadline', 'stipend'):
             if not card[field]:
                 st.warning(f'No {field} supplied; verify on the official site.')
-        if not card['verified']:
+        if not card['verified'] and not automatic:
             st.warning('Feed listing requires manual verification.')
         st.json({key: card[key] for key in ('location', 'stipend', 'batch_years', 'experience', 'deadline')})
         left, right = st.columns(2)
-        if left.button('Approve opportunity'):
+        if not automatic and left.button('Approve opportunity'):
             pipeline.card(opportunity_id)
             pipeline.db.set_status(opportunity_id, 'approved')
             st.rerun()
@@ -86,7 +89,7 @@ def main():
                 if st.button('Schedule approved video'):
                     schedule(pipeline, opportunity_id, when)
                     st.success('Scheduled. The run-daily --upload runner publishes due videos.')
-                confirmed = st.checkbox('Upload this reviewed video to my authorized YouTube channel')
+                confirmed = automatic or st.checkbox('Upload this reviewed video to my authorized YouTube channel')
                 if st.button('Upload now', disabled=not confirmed):
                     st.success(f"YouTube video: {pipeline.upload(opportunity_id)}")
     except Exception as exc:

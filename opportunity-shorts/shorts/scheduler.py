@@ -48,6 +48,8 @@ def run_daily(config_dir=None, collect=True, upload=False, manual_export=False):
             result['collected'] = {'kept': stats.kept, 'errors': stats.errors}
             result['errors'].extend(stats.errors)
             client.session.close()
+        if pipeline.settings['automation']['enabled']:
+            return run_automatic(pipeline, result, upload=upload, manual_export=manual_export)
         for row in pipeline.db.list(status='approved', limit=100, today=datetime.now(IST).date()):
             post = pipeline.posts.get(row['id'])
             if post and post.status in ('ready', 'uploading', 'posted'):
@@ -73,3 +75,149 @@ def run_daily(config_dir=None, collect=True, upload=False, manual_export=False):
         return result
     finally:
         pipeline.close()
+
+
+def run_automatic(pipeline, result, upload=False, manual_export=False):
+    """Bounded unattended queue: no human approvals, no rejected or duplicate posts."""
+    from .pipeline import fact_digest
+    from .upload import youtube_service, reconcile_pending
+    from pathlib import Path
+    import json
+    now = datetime.now(IST)
+    # Remove invalid queue entries even while channel access is unavailable.
+    for scheduled in pipeline.posts.conn.execute('SELECT opportunity_id FROM schedules').fetchall():
+        row = pipeline.db.get(scheduled['opportunity_id'])
+        if not row or row['status'] in ('rejected', 'posted') or not row['is_open'] or (row['deadline'] and row['deadline'] < now.date().isoformat()):
+            pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (scheduled['opportunity_id'],))
+    pipeline.posts.conn.commit()
+    # Check channel access before consuming generation/upload quota.
+    if upload:
+        try:
+            service = youtube_service(pipeline.settings)
+            result['uploaded'].extend(reconcile_pending(pipeline, service))
+        except Exception as exc:
+            result['errors'].append('YouTube connection: ' + str(exc))
+            upload = False
+    for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
+        if datetime.fromisoformat(row['scheduled_at']) > now or not (upload or manual_export):
+            continue
+        try:
+            card = pipeline.card(row['opportunity_id'])
+            manifest = Path(pipeline.settings['paths']['output_dir']) / card['id'] / 'manifest.json'
+            if not manifest.exists() or json.loads(manifest.read_text())['facts'] != fact_digest(card):
+                pipeline.build(card['id'], force=True)
+            value = pipeline.upload(card['id'], manual_export=manual_export)
+            result['uploaded'].append(str(value))
+            pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (card['id'],))
+            pipeline.posts.conn.commit()
+        except Exception as exc:
+            result['errors'].append(f"{row['opportunity_id']}: {exc}")
+    if pipeline.settings['llm'].get('provider') == 'ollama':
+        import requests
+        try:
+            cfg = pipeline.settings['llm']
+            response = requests.get(cfg['base_url'].rstrip('/') + '/api/tags', timeout=5)
+            response.raise_for_status()
+            if cfg['model'] not in {model['name'] for model in response.json()['models']}:
+                raise ValueError('Ollama model is still downloading or not installed: ' + cfg['model'])
+        except (requests.RequestException, ValueError, KeyError) as exc:
+            result['errors'].append(str(exc))
+            return result
+    maximum = int(pipeline.settings['automation']['max_builds_per_run'])
+    queued = pipeline.posts.conn.execute('SELECT COUNT(*) FROM schedules').fetchone()[0]
+    capacity = max(0, maximum - queued)
+    occupied = {r[0] for r in pipeline.posts.conn.execute('SELECT scheduled_at FROM schedules')}
+    used_roles = {(r[0], r[1]) for r in pipeline.posts.conn.execute(
+        "SELECT lower(o.company), lower(o.title) FROM opportunities o JOIN posts p ON o.id=p.opportunity_id "
+        "WHERE p.status IN ('ready','uploading','posted')")}
+    attempts = 0
+    for row in pipeline.db.list(status=None, limit=10000, today=now.date()):
+        if attempts >= capacity:
+            break
+        if row['status'] not in ('new', 'approved'):
+            continue
+        post = pipeline.posts.get(row['id'])
+        if post and post.status == 'failed':
+            if datetime.fromisoformat(post.updated_at) > now - timedelta(hours=1):
+                continue
+        if post and post.status in ('uploading', 'posted'):
+            continue
+        if pipeline.posts.conn.execute('SELECT 1 FROM schedules WHERE opportunity_id=?', (row['id'],)).fetchone():
+            continue
+        role_key = (row['company'].lower(), row['title'].lower())
+        if role_key in used_roles and not (post and post.status == 'ready'):
+            continue
+        slots = []
+        for days in range(8):
+            for slot in pipeline.settings['upload']['ist_slots']:
+                hour, minute = map(int, slot.split(':'))
+                candidate = (now + timedelta(days=days)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if candidate > now and candidate.isoformat() not in occupied:
+                    if not row['deadline'] or candidate.date().isoformat() <= row['deadline']:
+                        slots.append(candidate)
+        if not slots:
+            continue
+        attempts += 1
+        try:
+            pipeline.build(row['id'])
+            timestamp = min(slots)
+            schedule(pipeline, row['id'], timestamp.isoformat())
+            occupied.add(timestamp.isoformat())
+            used_roles.add(role_key)
+            result['generated'].append(row['id'])
+        except Exception as exc:
+            from .models import PostRecord
+            previous = pipeline.posts.get(row['id'])
+            pipeline.posts.upsert(PostRecord(row['id'], previous.script_json if previous else '{}',
+                status='failed', error_message=str(exc)))
+            result['errors'].append(f"{row['id']}: {exc}")
+    return result
+
+
+def run_daemon(config_dir=None, upload=True):
+    """Single local worker; collection every six hours, due publishing every minute."""
+    import json
+    import logging
+    import time
+    import os
+    from pathlib import Path
+    from .settings import load_shorts_settings
+    from collector.config import load_settings
+    # OS advisory lock is released on process death (no stale lockfile deadlock).
+    lock_path = Path(load_settings(config_dir)['db_path']).with_suffix('.worker.lock')
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open('a+b') as lock:
+        lock.seek(0)
+        lock.write(b'0')
+        lock.flush()
+        lock.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        settings = load_shorts_settings(config_dir)
+        if not settings['automation']['enabled']:
+            raise ValueError('Enable automation in shorts.yaml before starting the daemon')
+        log = logging.getLogger('shorts.worker')
+        log_path = lock_path.with_suffix('.log')
+        handler = logging.FileHandler(log_path, encoding='utf-8')
+        log.addHandler(handler)
+        log.setLevel(logging.INFO)
+        log.info('Worker started: automatic mode, model=%s, public upload requested=%s',
+                 settings['llm']['model'], upload)
+        next_collection = 0
+        while True:
+            collect = time.monotonic() >= next_collection
+            try:
+                result = run_daily(config_dir, collect=collect, upload=upload)
+                log.info(json.dumps(result))
+                import sys
+                if sys.stdout is not None:
+                    print(json.dumps(result), flush=True)
+            except Exception:
+                log.exception('Worker cycle failed; retrying next minute')
+            if collect:
+                next_collection = time.monotonic() + 6 * 60 * 60
+            time.sleep(60)

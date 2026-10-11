@@ -1,83 +1,60 @@
-# Opportunity Shorts
+﻿# Opportunity Shorts
 
-An end-to-end pipeline for turning reviewed internship, fresher-job, and hackathon listings into captioned YouTube Shorts.
+An end-to-end system that collects Indian-eligible internships and fresher jobs, writes original scripts with local Ollama, produces captioned vertical videos, and schedules YouTube uploads.
 
-Collect official feeds or import listings -> review and approve opportunities -> generate scripts, narration, and video -> preview and approve the video -> export for Studio or upload through the YouTube API.
+The current configuration uses automatic processing for **@unemployerr**: collection -> selection -> Ollama narration -> TTS -> rendered scenes/captions -> scheduled public upload. No listing or video approval is required in automatic mode. Automatic validation, expiry checks, duplicate prevention and upload caps remain.
+
+## Current setup
+
+The Windows **OpportunityShortsWorker** task is installed and started. YouTube authorization has not been supplied, so nothing has been uploaded. The installed 8B local model ran out of memory; a smaller `qwen3:1.7b` download was started. Free sufficient RAM and finish the model download to enable live inference.
+
+See [automatic setup and YouTube connection](docs/AUTOMATION.md), [reference-channel growth audit](docs/GROWTH.md), and [source inventory](docs/SOURCES.md).
 
 ## Start here
 
-Run commands from this directory (the inner `opportunity-shorts` folder):
+Run from the inner opportunity-shorts directory:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m playwright install chromium
-Copy-Item .env.example .env
+ollama pull qwen3:1.7b
 python -m shorts doctor
 python -m pytest -q
 ```
 
-FFmpeg and FFprobe must be on PATH. Anthropic is optional; template scripts work without a key. Edge TTS needs internet. YouTube uploads require your own OAuth credentials and default to private.
-
-## Try a complete video
+FFmpeg and FFprobe must be on PATH. Ollama runs locally without an LLM API key. Edge TTS and source collection require internet. YouTube needs your own Google OAuth Desktop client JSON and one-time channel consent.
 
 ```powershell
-python scripts/demo.py
-```
-
-This uses a fictional Example Corp listing and an isolated demo database. The result is `out/83856b4619525938/video.mp4`; it never uploads.
-
-## Daily workflow
-
-```powershell
-python -m collector validate-boards
-python -m collector run
+# Set YOUTUBE_CLIENT_SECRETS_FILE=secrets/client_secret.json in .env first:
+python -m shorts auth
+# The installed worker publishes automatically after connection.
 python -m shorts review
 ```
 
-The local dashboard supports opportunity approval/rejection, script editing, video generation and preview, video approval, manual export, upload, and scheduling. Nothing publishes without explicit video approval.
+The dashboard can show opportunities and video previews, edit scripts, reject listings and export videos. Manual approvals are available only when automation.enabled is false.
 
-See [the source inventory](docs/SOURCES.md) for every configured company board, additional internship platforms, public API options, and which services require credentials.
+## Components
 
-For manual imports, use `python -m collector manual config/manual_example.yaml`. Replace the example fields with details from an official listing. Do not post the fictional example.
+- Collector: 23 configured company-board/public-catalogue/employer-page targets, Indian-applicant eligibility and early-career filtering, scoring, SQLite storage, change/closure tracking.
+- Scripts: local Ollama JSON responses, light Hinglish preference, varied factual openings, original contextual guidance, relevant hashtags and automatic validation.
+- Media: cached Indian voices, four HTML scenes, layout/color variations, safe areas, ASS captions, normalized audio and FFmpeg H.264/AAC output.
+- Automation: six-hour collection, bounded generation queue, minute-by-minute due publishing, three IST slots, daily caps, cached builds, stale-content regeneration, channel identity checks and uncertain-upload recovery.
 
-## CLI workflow
+## Commands
 
 ```powershell
-python -m collector list
-python -m collector set-status <id> approved
+python -m collector run
 python -m shorts generate <id> --save
 python -m shorts build <id>
-# Preview out/<id>/video.mp4, then:
-python -m shorts approve-video <id>
-python -m shorts upload <id> --manual-export
-# Or configure OAuth and authorize:
-python -m shorts auth
 python -m shorts upload <id> --dry-run
-python -m shorts upload <id>
-# Choose the next configured IST slot:
-python -m shorts schedule <id>
-python -m shorts run-daily --no-collect --upload
+python -m shorts run-daily --upload
+python -m shorts daemon
 ```
 
-Manual exports include video, title, description, and disclosure settings. Exporting does not mark a listing posted. Upload attempts are limited, tracked, and protected against automatic duplicates after uncertain responses.
+The installed worker and foreground daemon must not run together. Keep the computer awake and connected. Public-upload visibility and live OAuth publication still need verification after authorization. There is no promise of channel growth, monetization approval or earnings.
 
-## What is implemented
-
-- Collector: Greenhouse, Lever, Ashby, Unstop and AICTE public catalogues, Himalayas, structured employer pages, RSS, optional Remotive, and manual imports; Indian-applicant eligibility and early-career filtering, scoring, SQLite persistence, and change/closure tracking.
-- Scripts: configurable Anthropic generation, validated template fallback, exact source-field checks and unsupported-number/date/URL detection.
-- Media: Indian-English TTS voices with cached word boundaries, four HTML scenes, three layout variations, two color themes, safe-area overflow checks, normalized narration, ASS captions, and optional licensed background music.
-- Review/publication: Streamlit dashboard, resumable OAuth upload, manual Studio export, two approval stages, IST schedules, configurable daily limits, stale-listing protection, and upload reconciliation.
-
-## Layout and details
-
-- `collector/`: ingestion and source adapters.
-- `shorts/`: shared pipeline, scripts, voice, rendering, assembly, storage, upload, scheduler, and CLI.
-- `shorts/review_app/`: local dashboard.
-- `config/`: sources, filtering, voices, themes, and publishing settings.
-- `tests/`: offline unit/workflow/dashboard tests.
-- [Operating guide](docs/END_TO_END.md): setup, OAuth, scheduling, recovery, current YouTube API policies, and verification.
-- [Card contract](docs/DATA_CONTRACT.md): collector interface and schema.
-
-The collector schema is unchanged; posts, schedules, and attempt records use separate tables in the same database. Optional Telegram, analytics, and link-in-bio features are not included. Real channel publication must be verified after connecting your credentials. Review remains necessary: automated checks cannot establish the truth of arbitrary prose.
+- [Operating notes](docs/END_TO_END.md)
+- [Growth findings](docs/GROWTH.md)
+- [Automatic operation](docs/AUTOMATION.md)
+- [Card contract](docs/DATA_CONTRACT.md)
+- [Earlier @ashishcode source audit](docs/CHANNEL_SOURCES.md)

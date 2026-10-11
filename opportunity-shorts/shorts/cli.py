@@ -111,12 +111,19 @@ def cmd_doctor(args):
     except Exception as exc:
         issues.append(f"Playwright Chromium unavailable: {exc}")
 
-    # Check Anthropic API key
+    # Check local Ollama
     settings = load_shorts_settings(args.config)
-    if settings.get("anthropic_api_key"):
-        print("OK ANTHROPIC_API_KEY set")
-    else:
-        print("NOTE ANTHROPIC_API_KEY not set (will use template fallback)")
+    import requests
+    try:
+        response = requests.get(settings['llm']['base_url'].rstrip('/') + '/api/tags', timeout=5)
+        response.raise_for_status()
+        names = {model['name'] for model in response.json()['models']}
+        if settings['llm']['model'] not in names:
+            issues.append('Configured Ollama model is not installed')
+        else:
+            print('OK local Ollama model: ' + settings['llm']['model'])
+    except (requests.RequestException, KeyError, ValueError):
+        issues.append('Ollama is unavailable; start Ollama')
 
     # Check YouTube client secrets
     if settings.get("youtube_client_secrets_file"):
@@ -169,6 +176,10 @@ def cmd_pipeline(args):
         result = run_daily(args.config, not args.no_collect, args.upload, args.manual_export)
         print(json.dumps(result, indent=2))
         return 1 if result['errors'] else 0
+    if args.cmd == 'daemon':
+        from .scheduler import run_daemon
+        run_daemon(args.config, upload=not args.no_upload)
+        return 0
     pipeline = Pipeline(args.config)
     try:
         if args.cmd == 'auth':
@@ -238,6 +249,9 @@ def main(argv=None) -> int:
     command.add_argument('--manual-export', action='store_true')
     command.set_defaults(fn=cmd_pipeline)
     command = sub.add_parser('review', help='Launch local review dashboard')
+    command.set_defaults(fn=cmd_pipeline)
+    command = sub.add_parser('daemon', help='Continuously collect, build, schedule and publish without approvals')
+    command.add_argument('--no-upload', action='store_true', help='Generate and schedule without publishing')
     command.set_defaults(fn=cmd_pipeline)
 
     s = sub.add_parser("generate", help="generate script for an opportunity")

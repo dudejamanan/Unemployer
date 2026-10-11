@@ -57,7 +57,12 @@ def inspect_video(video):
             if parsed.netloc.endswith('youtube.com') and parsed.path == '/redirect':
                 link = parse_qs(parsed.query).get('q', [link])[0]
             links.append(link)
-        return {'title': title, 'video': url, 'description_available': bool(description), 'links': list(dict.fromkeys(links))}
+        details = player.get('videoDetails', {})
+        return {'title': details.get('title', title), 'video': url,
+                'description_available': bool(description), 'description': description,
+                'views': details.get('viewCount'), 'duration_seconds': details.get('lengthSeconds'),
+                'hashtags': list(dict.fromkeys(re.findall(r'#[\w]+', description))),
+                'links': list(dict.fromkeys(links))}
     except requests.RequestException as exc:
         return {'title': title, 'video': url, 'error': type(exc).__name__}
 
@@ -66,6 +71,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--channel', default='https://www.youtube.com/@ashishcode')
     parser.add_argument('--limit', type=int, default=10)
+    parser.add_argument('--output', default='channel_sources.json')
+    parser.add_argument('--quiet', action='store_true')
     args = parser.parse_args()
     html = get(args.channel.rstrip('/') + '/videos')
     folder = ROOT / 'data' / 'source_probes'
@@ -79,8 +86,9 @@ def main():
     with ThreadPoolExecutor(max_workers=3) as executor:
         for item in executor.map(inspect_video, videos):
             report['videos'].append(item)
-            print(json.dumps(item), flush=True)
-    path = ROOT / 'data' / 'source_probes' / 'channel_sources.json'
+            if not args.quiet:
+                print(json.dumps(item), flush=True)
+    path = ROOT / 'data' / 'source_probes' / Path(args.output).name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print('Videos audited:', len(report['videos']))

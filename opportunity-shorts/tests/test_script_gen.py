@@ -172,21 +172,10 @@ def test_script_validation_hackathon():
     assert is_valid, f"Validation failed: {errors}"
 
 
-def test_generate_script_without_api_key():
-    """Test that generate_script uses fallback when no API key."""
-    # Remove API key from settings if present
-    import os
-    old_key = os.environ.pop("ANTHROPIC_API_KEY", None)
-    try:
-        settings = load_shorts_settings()
-        # Ensure no API key in settings
-        settings.pop("anthropic_api_key", None)
-        script = generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
-        assert script.hook
-        assert "Google" in script.hook
-    finally:
-        if old_key:
-            os.environ["ANTHROPIC_API_KEY"] = old_key
+def test_generate_script_template_mode():
+    settings = load_shorts_settings()
+    settings['llm']['provider'] = 'template'
+    assert generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings).on_screen.company == 'Google'
 
 
 def test_script_serialization():
@@ -202,38 +191,44 @@ def test_script_serialization():
     assert script.title == script2.title
 
 
-def test_llm_text_blocks_and_current_request(monkeypatch):
+def test_ollama_request_and_response(monkeypatch):
     import json
-    from types import SimpleNamespace
     from unittest.mock import Mock
-    import anthropic
     settings = load_shorts_settings()
-    settings['anthropic_api_key'] = 'mock-key'
     expected = _template_fallback(CARD_INTERNSHIP_WITH_STIPEND, settings)
-    client = Mock()
-    client.messages.create.return_value.content = [
-        SimpleNamespace(type='thinking'),
-        SimpleNamespace(type='text', text=json.dumps(expected.to_dict())),
-    ]
-    monkeypatch.setattr(anthropic, 'Anthropic', lambda **kwargs: client)
+    response = Mock()
+    response.json.return_value = {'message': {'content': json.dumps(expected.to_dict())}}
+    post = Mock(return_value=response)
+    monkeypatch.setattr('requests.post', post)
     result = generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
     assert result.title == expected.title
-    assert 'temperature' not in client.messages.create.call_args.kwargs
-    assert client.messages.create.call_args.kwargs['model'] == settings['llm']['model']
+    assert post.call_args.args[0].endswith('/api/chat')
+    body = post.call_args.kwargs['json']
+    assert body['format'] == 'json' and body['stream'] is False and body['think'] is False
+    assert 'Authorization' not in post.call_args.kwargs
 
 
-def test_invalid_llm_facts_retry_then_fallback(monkeypatch):
+def test_invalid_ollama_facts_retry_then_fail(monkeypatch):
     import json
-    from types import SimpleNamespace
     from unittest.mock import Mock
-    import anthropic
     settings = load_shorts_settings()
-    settings['anthropic_api_key'] = 'mock-key'
     script = _template_fallback(CARD_INTERNSHIP_WITH_STIPEND, settings)
     script.on_screen.stipend = 'Rs 999,999 per month'
-    client = Mock()
-    client.messages.create.return_value.content = [SimpleNamespace(type='text', text=json.dumps(script.to_dict()))]
-    monkeypatch.setattr(anthropic, 'Anthropic', lambda **kwargs: client)
-    result = generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
-    assert validate_script(result, CARD_INTERNSHIP_WITH_STIPEND)[0]
-    assert client.messages.create.call_count == settings['llm']['max_retries']
+    response = Mock()
+    response.json.return_value = {'message': {'content': json.dumps(script.to_dict())}}
+    post = Mock(return_value=response)
+    monkeypatch.setattr('requests.post', post)
+    with pytest.raises(RuntimeError, match='Ollama'):
+        generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
+    assert post.call_count == settings['llm']['max_retries']
+
+
+def test_ollama_unavailable_does_not_silently_publish_templates(monkeypatch):
+    import requests
+    from unittest.mock import Mock
+    settings = load_shorts_settings()
+    monkeypatch.setattr('requests.post', Mock(side_effect=requests.ConnectionError('offline')))
+    with pytest.raises(RuntimeError):
+        generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings)
+    settings['llm']['fallback_on_failure'] = True
+    assert generate_script(CARD_INTERNSHIP_WITH_STIPEND, settings).on_screen.company == 'Google'

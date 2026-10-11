@@ -5,7 +5,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = ['https://www.googleapis.com/auth/youtube.upload',
+          'https://www.googleapis.com/auth/youtube.readonly']
 
 
 def export_manual(post, script, settings):
@@ -31,7 +32,9 @@ def youtube_service(settings, interactive=False):
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     token = Path(settings['youtube_token_file'])
-    credentials = Credentials.from_authorized_user_file(str(token), SCOPES) if token.exists() else None
+    credentials = Credentials.from_authorized_user_file(str(token)) if token.exists() else None
+    if credentials and not credentials.has_scopes(SCOPES):
+        credentials = None
     if credentials and credentials.expired and credentials.refresh_token:
         credentials.refresh(Request())
     if not credentials or not credentials.valid:
@@ -43,7 +46,17 @@ def youtube_service(settings, interactive=False):
         credentials = InstalledAppFlow.from_client_secrets_file(secrets, SCOPES).run_local_server(port=0)
     token.parent.mkdir(parents=True, exist_ok=True)
     token.write_text(credentials.to_json(), encoding='utf-8')
-    return build('youtube', 'v3', credentials=credentials, cache_discovery=False)
+    service = build('youtube', 'v3', credentials=credentials, cache_discovery=False)
+    expected = settings['upload'].get('expected_channel_handle')
+    expected_id = settings['upload'].get('expected_channel_id')
+    if expected or expected_id:
+        channels = service.channels().list(part='id,snippet', mine=True).execute().get('items', [])
+        matches = [channel for channel in channels if
+                   (channel['id'] == expected_id if expected_id else
+                    channel['snippet'].get('customUrl', '').lstrip('@').casefold() == expected.lstrip('@').casefold())]
+        if len(matches) != 1:
+            raise ValueError('Authorized account is not the configured channel; run auth and select @unemployerr')
+    return service
 
 
 def upload_video(post, script, settings, service=None):
@@ -73,3 +86,33 @@ def upload_video(post, script, settings, service=None):
     if not response.get('id'):
         raise RuntimeError('Upload response contains no video ID; reconcile in YouTube Studio')
     return response['id']
+
+
+def reconcile_pending(pipeline, service):
+    """Find an accepted upload after a lost response; never blindly insert again."""
+    pending = pipeline.posts.conn.execute("SELECT * FROM posts WHERE status='uploading'").fetchall()
+    if not pending:
+        return []
+    channels = service.channels().list(part='contentDetails', mine=True).execute().get('items', [])
+    video_ids = []
+    for channel in channels:
+        playlist = channel['contentDetails']['relatedPlaylists']['uploads']
+        items = service.playlistItems().list(part='contentDetails', playlistId=playlist, maxResults=50).execute().get('items', [])
+        video_ids.extend(item['contentDetails']['videoId'] for item in items)
+    if not video_ids:
+        return []
+    videos = []
+    for offset in range(0, len(video_ids), 50):
+        videos.extend(service.videos().list(part='snippet', id=','.join(video_ids[offset:offset+50])).execute().get('items', []))
+    found = []
+    for post in pending:
+        script = json.loads(post['script_json'])
+        matches = [video for video in videos if video['snippet'].get('title') == script['title']
+                   and video['snippet'].get('description') == script['description']]
+        if len(matches) == 1:
+            pipeline.posts.set_youtube_id(post['opportunity_id'], matches[0]['id'])
+            pipeline.db.set_status(post['opportunity_id'], 'posted')
+            pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (post['opportunity_id'],))
+            pipeline.posts.conn.commit()
+            found.append(matches[0]['id'])
+    return found

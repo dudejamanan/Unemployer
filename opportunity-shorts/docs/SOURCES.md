@@ -89,7 +89,7 @@ See [the channel source audit](CHANNEL_SOURCES.md) for verified application link
 No API key was used for the completed live collection or generated example videos:
 
 - Collection: public company job-board endpoints.
-- Script generation: built-in fact-checked template fallback. Anthropic is optional and was not called without a configured key.
+- Earlier demonstration scripts: built-in validated templates. The active configuration now uses local Ollama with no paid API key; see AUTOMATION.md for model readiness and unattended operation.
 - Narration: Edge TTS, which needs internet but no user-supplied API key.
 - YouTube: not connected or used for a live upload. Uploads require your own Google OAuth client credentials and channel authorization.
 

@@ -47,7 +47,9 @@ class Pipeline:
         card = row_to_card(row)
         if not row['is_open'] or (card['deadline'] and card['deadline'] < datetime.now(IST).date().isoformat()):
             raise ValueError('Opportunity is closed or expired')
-        if approved and card['status'] != 'approved':
+        if card['status'] == 'rejected':
+            raise ValueError('Opportunity was rejected')
+        if approved and card['status'] != 'approved' and not self.settings['automation']['enabled']:
             raise ValueError('Explicit opportunity approval is required')
         if SCAM_RE.search(card['role'] + '\n' + card['description']):
             raise ValueError('Suspicious fee, deposit, or messaging-only listing')
@@ -80,18 +82,28 @@ class Pipeline:
             return post
         if post and post.status == 'uploading':
             raise ValueError('Resolve previous upload in YouTube Studio before retrying')
-        script = ScriptDoc.from_dict(json.loads(post.script_json)) if post else self.script(card['id'])
+        existing_manifest = Path(self.settings['paths']['output_dir']) / card['id'] / 'manifest.json'
+        changed = (existing_manifest.exists() and
+                   json.loads(existing_manifest.read_text())['facts'] != fact_digest(card))
+        llm_identity = {key: self.settings['llm'].get(key) for key in ('provider', 'model')}
+        llm_identity['hinglish'] = self.settings['script'].get('hinglish_enabled', False)
+        changed_generator = (self.settings['automation']['enabled'] and existing_manifest.exists() and
+                             json.loads(existing_manifest.read_text()).get('llm') != llm_identity)
+        script = ScriptDoc.from_dict(json.loads(post.script_json)) if post and post.script_json != '{}' and not changed and not changed_generator else self.script(card['id'])
         valid, errors = validate_script(script, card)
         if not valid:
             raise ValueError('; '.join(errors))
         folder = Path(self.settings['paths']['output_dir']) / card['id']
         folder.mkdir(parents=True, exist_ok=True)
-        digest = hashlib.sha256(json.dumps({'facts': fact_digest(card), 'script': script.to_dict(), 'settings': {
+        digest = hashlib.sha256(json.dumps({'facts': fact_digest(card), 'llm': llm_identity, 'script': script.to_dict(), 'settings': {
             key: self.settings[key] for key in ('voices', 'theme', 'assembly', 'captions')},
             'audio': str(audio_path) if audio_path else None}, sort_keys=True).encode()).hexdigest()
         manifest = folder / 'manifest.json'
         if not force and post and post.video_path and Path(post.video_path).exists() and manifest.exists():
             if json.loads(manifest.read_text())['digest'] == digest:
+                if self.settings['automation']['enabled'] and post.status == 'generated':
+                    self.posts.update_status(card['id'], 'ready')
+                    post.status = 'ready'
                 return post
         post = PostRecord(card['id'], json.dumps(script.to_dict(), ensure_ascii=False), status='generating')
         self.posts.upsert(post)
@@ -114,9 +126,10 @@ class Pipeline:
             video = assemble_with_captions(scenes, Path(audio.audio_path), folder / 'video.mp4',
                                           audio.word_timestamps, music_path=music, settings=self.settings)
             post.video_path = str(video)
-            post.status = 'generated'
+            post.status = 'ready' if self.settings['automation']['enabled'] else 'generated'
             (folder / 'script.json').write_text(json.dumps(script.to_dict(), ensure_ascii=False, indent=2), encoding='utf-8')
-            manifest.write_text(json.dumps({'digest': digest, 'facts': fact_digest(card), 'duration': audio.duration_seconds}), encoding='utf-8')
+            manifest.write_text(json.dumps({'digest': digest, 'facts': fact_digest(card), 'duration': audio.duration_seconds,
+                                           'llm': llm_identity}), encoding='utf-8')
             self.posts.upsert(post)
             return post
         except Exception as exc:

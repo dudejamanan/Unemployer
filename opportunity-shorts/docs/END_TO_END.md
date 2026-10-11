@@ -1,4 +1,6 @@
-# Completed workflow and operating notes
+# Operating notes
+
+Current production defaults changed to unattended Ollama generation for @unemployerr. See [AUTOMATION.md](AUTOMATION.md) for active setup and [GROWTH.md](GROWTH.md) for the channel audit. Approval instructions below apply only with `automation.enabled: false`.
 
 The collector and stages M1–M3 existed. Assembly was incomplete and could not import;
 captions, review, upload, and scheduling were missing. Stages M4–M6 now share
@@ -25,15 +27,12 @@ Edge TTS needs internet; `build --audio narration.wav` accepts a human-recorded 
 Do not use silent audio as a production fallback. When narration is outside 20–40 seconds,
 the build fails with its measured duration; adjust the script or supply another recording.
 
-An Anthropic key is optional. The default is `claude-sonnet-5-5`, following the
-[current migration guide](https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide):
-omit non-default temperature, use low effort without up-front thinking, and read text
-blocks by type. Select a model available to your account in `config/shorts.yaml`; update
-`llm.extra_body` and temperature together if you choose an older model. Failed or invalid
-LLM responses fall back to a deterministic script. Hinglish is not implemented as a separate
-template mode; validated script edits can provide it. Automatic validation checks known
-fields, numeric tokens, dates, and URLs, but cannot prove arbitrary prose factual. Review
-the script and official listing before video approval.
+Script generation now uses local Ollama, not Anthropic. No paid LLM API key is used.
+The active model is qwen3:1.7b with a small context to reduce memory usage. The installed
+qwen3:8b failed due to insufficient memory; the smaller download and a successful inference
+must be completed before claiming the local-model pipeline is verified. Hinglish is preferred,
+with English permitted for clarity. Failed scripts are deferred automatically. Numeric and
+field validation cannot establish all unrestricted prose claims as true.
 
 Place an optional licensed TTF in `assets/fonts/`; rendering embeds the first TTF found.
 Otherwise rendering uses system fonts. Fonts are not redistributed with this project.
@@ -88,8 +87,7 @@ python -m shorts auth
 python -m shorts upload <id>
 ```
 
-Authorization is interactive once; tokens refresh locally when supported. Uploads default
-to **private**. Set `upload.privacy` to `unlisted` or `public` deliberately when ready.
+Authorization is interactive once; tokens refresh locally when supported. The active configuration requests **public** uploads to the verified @unemployerr channel ID.
 The code sets Education, not-made-for-kids, and synthetic-media disclosure by default.
 No real channel upload was performed during development: credentials were unavailable.
 Resumable upload success/failure and approval guards are covered with mocked services.
@@ -98,7 +96,7 @@ Current official docs checked October 11, 2026 differ from the old project promp
 [`videos.insert`](https://developers.google.com/youtube/v3/docs/videos/insert) now documents
 100 calls/day and 1 unit per call in a separate Video Uploads quota bucket. It also says
 unverified API projects are no longer restricted to private viewing. Check the actual
-project limits in Cloud Console; the application still defaults to private and a conservative
+project limits in Cloud Console; the application now requests public visibility and keeps a conservative
 3 attempts per IST day. `upload.api_daily_upload_limit` is a configurable additional ceiling,
 not a live query of remaining Google quota shared with other applications.
 
@@ -122,7 +120,7 @@ python -m shorts run-daily --no-collect --upload
 ```
 
 Without a time, scheduling selects the next slot from `upload.ist_slots` (08:00, 13:00,
-19:00 by default). Only videos explicitly approved for uploading can be scheduled.
+19:00 by default). Manual mode requires approvals; automatic mode schedules successfully generated videos without human approval.
 The runner uploads due schedules only when `--upload` is present; otherwise it collects
 and generates drafts. `--manual-export` exports due schedules instead of API uploads.
 Expired, closed, scam-pattern, and changed listings cannot be published. The application
@@ -132,7 +130,7 @@ Use Windows Task Scheduler: set **Start in** to the project directory and use th
 absolute Python executable. Create collection/generation triggers twice daily (e.g. 06:00
 and 18:00 IST) with arguments `-m shorts run-daily`. Create a runner every 15 minutes
 with arguments `-m shorts run-daily --no-collect --upload`. Set the task to avoid concurrent
-instances. No machine-level scheduled tasks have been installed by this project change.
+instances. The current-user OpportunityShortsWorker task is now installed; use that daemon instead of installing these older manual-mode tasks.
 Keep the machine awake and network connected for scheduled runs.
 
 ## Recovery and idempotency

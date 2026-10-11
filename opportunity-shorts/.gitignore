@@ -1,6 +1,10 @@
 data/*.db
 data/*.json
 data/source_probes/
+data/*.worker.log
+data/*.worker.lock
+data/worker-console.log
+data/worker-start-error.txt
 __pycache__/
 .pytest_cache/
 .env

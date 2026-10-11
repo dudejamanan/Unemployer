@@ -9,12 +9,15 @@ from collector.config import ROOT, load_yaml
 
 DEFAULT_SHORTS_SETTINGS = {
     "llm": {
-        "model": "claude-sonnet-5-5",
-        "temperature": None,
-        "extra_body": {"thinking": {"type": "between_tools"}, "output_config": {"effort": "low"}},
-        "max_retries": 3,
-        "timeout_seconds": 30,
+        "provider": "ollama",
+        "base_url": "http://127.0.0.1:11434",
+        "model": "qwen3:1.7b",
+        "temperature": 0.6,
+        "max_retries": 2,
+        "timeout_seconds": 120,
+        "fallback_on_failure": False,
     },
+    "automation": {"enabled": False, "max_builds_per_run": 3, "interval_minutes": 30},
     "voices": {
         "male": "en-IN-PrabhatNeural",
         "female": "en-IN-NeerjaNeural",
@@ -126,10 +129,11 @@ def load_shorts_settings(config_dir: Path | str | None = None) -> dict[str, Any]
         _deep_merge(settings, yaml_cfg)
 
     # Override with env vars
-    if os.getenv("ANTHROPIC_API_KEY"):
-        settings["anthropic_api_key"] = os.getenv("ANTHROPIC_API_KEY")
-    if os.getenv("YOUTUBE_CLIENT_SECRETS_FILE"):
-        settings["youtube_client_secrets_file"] = os.getenv("YOUTUBE_CLIENT_SECRETS_FILE")
+    for environment, key in (("OLLAMA_BASE_URL", "base_url"), ("OLLAMA_MODEL", "model")):
+        if os.getenv(environment):
+            settings["llm"][key] = os.environ[environment]
+    settings["youtube_client_secrets_file"] = os.getenv(
+        "YOUTUBE_CLIENT_SECRETS_FILE", str(ROOT / "secrets" / "client_secret.json"))
     if os.getenv("TELEGRAM_BOT_TOKEN"):
         settings["telegram_bot_token"] = os.getenv("TELEGRAM_BOT_TOKEN")
     if os.getenv("TELEGRAM_CHANNEL_ID"):

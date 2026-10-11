@@ -23,7 +23,7 @@ def test_resumable_upload_metadata(tmp_path):
     service.videos().insert().next_chunk.side_effect = [(None, None), (None, {'id': 'abcdefghijk'})]
     assert upload_video(post, script, settings, service) == 'abcdefghijk'
     args = service.videos().insert.call_args.kwargs
-    assert args['body']['status']['privacyStatus'] == 'private'
+    assert args['body']['status']['privacyStatus'] == settings['upload'].get('privacy', 'private')
     assert args['body']['status']['containsSyntheticMedia'] is True
     assert args['body']['status']['selfDeclaredMadeForKids'] is False
     assert args['body']['snippet']['categoryId'] == '27'

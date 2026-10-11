@@ -3,13 +3,19 @@
 
 # LLM settings for script generation
 llm:
-  model: claude-sonnet-5-5
-  temperature: null  # Current Sonnet rejects non-default sampling parameters.
-  extra_body:
-    thinking: {type: between_tools}
-    output_config: {effort: low}
-  max_retries: 3
-  timeout_seconds: 30
+  provider: ollama
+  base_url: http://127.0.0.1:11434
+  model: qwen3:1.7b
+  temperature: 0.6
+  max_retries: 2
+  timeout_seconds: 120
+  fallback_on_failure: false
+  num_ctx: 4096
+
+automation:
+  enabled: true
+  max_builds_per_run: 3
+  interval_minutes: 30
 
 # Voice settings (edge-tts)
 # Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices
@@ -24,7 +30,7 @@ script:
   max_words: 85
   target_duration_seconds: 25  # Target 20-35s, aim for middle
   max_title_chars: 100
-  hinglish_enabled: false  # Allow light Hinglish in Latin script
+  hinglish_enabled: true  # Allow light Hinglish in Latin script
 
 # Visual theme settings
 theme:
@@ -48,7 +54,7 @@ theme:
 
 # Upload and scheduling
 upload:
-  privacy: private
+  privacy: public
   contains_synthetic_media: true
   api_daily_upload_limit: 100
   daily_limit: 3  # Max uploads per day (quota-aware)
@@ -57,6 +63,8 @@ upload:
     - "13:00"
     - "19:00"
   category_id: 27  # Education category
+  expected_channel_handle: unemployerr
+  expected_channel_id: UCh9aBTHwc9QyIhe5SflYtBQ
   made_for_kids: false
 
 # Paths (relative to project root or absolute)

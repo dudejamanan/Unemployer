@@ -20,7 +20,7 @@ def pipeline(tmp_path, monkeypatch):
     monkeypatch.setenv('OPP_DB_PATH', str(tmp_path / 'opportunities.db'))
     config = tmp_path / 'config'
     config.mkdir()
-    (config / 'shorts.yaml').write_text(f'paths:\n  output_dir: {tmp_path.as_posix()}/out\n')
+    (config / 'shorts.yaml').write_text(f'llm:\n  provider: template\npaths:\n  output_dir: {tmp_path.as_posix()}/out\n')
     p = Pipeline(config)
     opp = Opportunity(source='manual', board='manual', external_id='test',
         title='Software Engineering Intern', company='Example Corp',
@@ -169,7 +169,116 @@ def test_daily_limit_counts_failed_attempts(pipeline, monkeypatch):
     upload.assert_not_called()
 
 
-def test_dashboard_review(pipeline):
+def test_automatic_build_and_upload_without_approvals(pipeline, monkeypatch):
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    mock_media(monkeypatch)
+    assert p.db.get(p.test_id)['status'] == 'new'
+    assert p.build(p.test_id).status == 'ready'
+    upload = Mock(return_value='abcdefghijk')
+    monkeypatch.setattr('shorts.upload.upload_video', upload)
+    assert p.upload(p.test_id) == 'abcdefghijk'
+    assert p.db.get(p.test_id)['status'] == 'posted'
+    assert p.upload(p.test_id) == 'abcdefghijk'
+    assert upload.call_count == 1
+
+
+def test_automatic_runner_schedules_once_and_ignores_rejected(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    mock_media(monkeypatch)
+    empty = lambda: {'generated': [], 'uploaded': [], 'errors': []}
+    result = run_automatic(p, empty())
+    assert result['generated'] == [p.test_id]
+    assert not result['errors']
+    assert not run_automatic(p, empty())['generated']
+    assert p.posts.conn.execute('SELECT COUNT(*) FROM schedules').fetchone()[0] == 1
+    p.db.set_status(p.test_id, 'rejected')
+    with pytest.raises(ValueError, match='rejected'):
+        p.upload(p.test_id)
+
+
+def test_automatic_changed_facts_regenerate(pipeline, monkeypatch):
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    tts = mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.db.conn.execute('UPDATE opportunities SET location=? WHERE id=?', ('Mumbai, India', p.test_id))
+    p.db.conn.commit()
+    p.build(p.test_id)
+    assert tts.call_count == 2
+    assert 'Mumbai' in p.posts.get(p.test_id).script_json
+
+
+def test_automatic_failed_item_is_deferred(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    build = Mock(side_effect=RuntimeError('temporary failure'))
+    monkeypatch.setattr(p, 'build', build)
+    empty = lambda: {'generated': [], 'uploaded': [], 'errors': []}
+    assert run_automatic(p, empty())['errors']
+    assert p.posts.get(p.test_id).status == 'failed'
+    assert not run_automatic(p, empty())['errors']
+    assert build.call_count == 1
+
+
+def test_automatic_model_change_invalidates_cache(pipeline, monkeypatch):
+    p = pipeline
+    p.settings['automation']['enabled'] = True
+    tts = mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.settings['llm']['model'] = 'a-different-local-model'
+    p.build(p.test_id)
+    # Identity changes must not silently retain an old producer's script/video.
+    manifest = json.loads((Path(p.settings['paths']['output_dir']) / p.test_id / 'manifest.json').read_text())
+    assert manifest['llm']['model'] == 'a-different-local-model'
+    assert tts.call_count == 2
+
+
+def test_lost_upload_response_reconciles_automatically(pipeline, monkeypatch):
+    from shorts.upload import reconcile_pending
+    p = pipeline
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.posts.update_status(p.test_id, 'uploading')
+    script = json.loads(p.posts.get(p.test_id).script_json)
+    service = Mock()
+    service.channels().list().execute.return_value = {'items': [
+        {'contentDetails': {'relatedPlaylists': {'uploads': 'playlist'}}}]}
+    service.playlistItems().list().execute.return_value = {'items': [
+        {'contentDetails': {'videoId': 'abcdefghijk'}}]}
+    service.videos().list().execute.return_value = {'items': [
+        {'id': 'abcdefghijk', 'snippet': {'title': script['title'], 'description': script['description']}}]}
+    assert reconcile_pending(p, service) == ['abcdefghijk']
+    assert p.posts.get(p.test_id).status == 'posted'
+    assert p.db.get(p.test_id)['status'] == 'posted'
+    service.videos().insert.assert_not_called()
+
+
+def test_ambiguous_upload_recovery_does_not_duplicate(pipeline, monkeypatch):
+    from shorts.upload import reconcile_pending
+    p = pipeline
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.posts.update_status(p.test_id, 'uploading')
+    script = json.loads(p.posts.get(p.test_id).script_json)
+    service = Mock()
+    service.channels().list().execute.return_value = {'items': [
+        {'contentDetails': {'relatedPlaylists': {'uploads': 'playlist'}}}]}
+    service.playlistItems().list().execute.return_value = {'items': [
+        {'contentDetails': {'videoId': 'abcdefghijk'}}, {'contentDetails': {'videoId': 'lmnopqrstuv'}}]}
+    snippet = {'title': script['title'], 'description': script['description']}
+    service.videos().list().execute.return_value = {'items': [
+        {'id': 'abcdefghijk', 'snippet': snippet}, {'id': 'lmnopqrstuv', 'snippet': snippet}]}
+    assert reconcile_pending(p, service) == []
+    assert p.posts.get(p.test_id).status == 'uploading'
+    service.videos().insert.assert_not_called()
+
+
+def test_dashboard_review(pipeline, monkeypatch):
+    monkeypatch.setenv('SHORTS_CONFIG_DIR', str(pipeline.config_dir))
     from streamlit.testing.v1 import AppTest
     app = AppTest.from_file(str(Path(__file__).parents[1] / 'shorts' / 'review_app' / 'app.py'), default_timeout=10).run()
     assert not app.exception
