@@ -1,0 +1,25 @@
+# Company career boards read through the vendors' PUBLIC job-board JSON endpoints (no login, no HTML scraping).
+#   greenhouse -> boards-api.greenhouse.io/v1/boards/{token}/jobs
+#   lever      -> api.lever.co/v0/postings/{token}   (add `region: eu` for jobs.eu.lever.co boards)
+#   ashby      -> api.ashbyhq.com/posting-api/job-board/{token}
+# `token` is the last part of the company's careers URL, e.g. boards.greenhouse.io/<token>.
+# Add boards with:  python -m collector add-board https://jobs.lever.co/<token>
+# Includes the original smoke-test boards and additional employers with India internship coverage.
+# Source inventory and API/key requirements: docs/SOURCES.md.
+# Keep this list as the LAST thing in the file (add-board appends to the end).
+boards:
+  - {ats: greenhouse, token: stripe,  company: Stripe,  priority: false}
+  - {ats: greenhouse, token: gitlab,  company: GitLab,  priority: false}
+  - {ats: lever,      token: spotify, company: Spotify, priority: false}
+  - {ats: ashby,      token: notion,  company: Notion,  priority: false}
+  - {ats: ashby,      token: openai,  company: OpenAI,  priority: false}
+  - {ats: greenhouse, token: instawork, company: "Instawork", priority: false}
+  - {ats: lever, token: paytm, company: "Paytm", priority: false}
+  - {ats: greenhouse, token: cialfo, company: "Cialfo", priority: false}
+  - {ats: greenhouse, token: mpowerfinancing, company: "MPOWER Financing", priority: false}
+  - {ats: ashby, token: almabase, company: "Almabase", priority: false}
+  - {ats: lever, token: aleph, company: "Aleph", priority: false}
+  - {ats: lever, token: dnb, company: "Dun & Bradstreet", priority: false}
+  - {ats: lever, token: paytmpayments, company: "Paytm Payments Services", priority: false}
+  - {ats: greenhouse, token: hackerrank, company: "HackerRank", priority: false}
+  - {ats: greenhouse, token: zscaler, company: "Zscaler", priority: false}

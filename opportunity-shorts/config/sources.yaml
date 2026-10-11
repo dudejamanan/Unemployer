@@ -1,0 +1,52 @@
+# Optional extra sources. ATS company boards live in boards.yaml.
+# Public APIs were probed on October 11, 2026; use applicant eligibility rather than office country.
+himalayas:
+  enabled: true
+  country: IN
+  employment_type: Intern
+  max_pages: 10         # search pages; 20 results per page
+remotive:
+  enabled: false        # Public API works, but redistribution terms need provider permission for this channel
+  search: intern
+  limit: 100
+
+# Undocumented public endpoints used by the portals themselves; no login or key.
+# Bounded pages of current listings, so a missing item never marks an older card closed.
+unstop:
+  enabled: true
+  max_pages: 10         # up to 180 listings per collection
+aicte:
+  enabled: true
+  max_pages: 10         # up to 120 listings per collection
+
+# Verified employer links identified in @ashishcode's video descriptions.
+official_pages:
+  enabled: true
+  pages:
+    - name: urbanizer-intern
+      company: Urbanizer Co.
+      url: https://urbanizer.in/careers/software-engineer-intern/
+    - name: urbanizer-engineer
+      company: Urbanizer Co.
+      url: https://urbanizer.in/careers/software-engineer/
+    - name: virtusa-associate
+      company: Virtusa
+      url: https://www.virtusa.com/careers/job-search/global/en/job/CREQ261742/Associate
+    - name: niit-associate
+      company: NIIT
+      url: https://jobs.niit.com/NIITMTS/job/Gurgaon,-Haryana-ASSOCIATE-SOFTWARE-ENGINEER/60339044/
+      title_selector: '[itemprop="title"]'
+      description_selector: '.jobdescription'
+      location_selector: '[data-careersite-propertyid="location"]'
+    - name: jio-graduate-trainee
+      company: Reliance Jio
+      url: https://careers.jio.com/frmjobdescription.aspx?JBTITLE=sw0Zm3lyYxCxoMX16YHDuA%3d%3d&jbID=ogEAxHe6MMdei%2f4eUY1l7Q%3d%3d&funcCode=ni4dknKJ6TY%3d
+      title_selector: '#MainContent_lblJobTitle'
+      title_remove_pattern: '\s*\(\s*\d+\s*\)\s*$'
+      description_selector: '#MainContent_lblSummRole, #MainContent_lblEduReqlbl, #MainContent_lblEduReq, #MainContent_lblExpReqlbl, #MainContent_lblExpReq, #MainContent_lblSkill'
+      location_selector: '#MainContent_lblLoc'
+
+# Generic RSS/Atom feeds (blogs, government notices, hackathon announcements).
+# Example entry:
+#   - {name: some-feed, url: "https://example.com/feed.xml", company: "Organizer name", opp_type: hackathon, location: "India"}
+feeds: []

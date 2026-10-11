@@ -1,0 +1,18 @@
+# Collector settings. Env vars OPP_USER_AGENT / OPP_DB_PATH override the first two.
+user_agent: "OpportunityShortsBot/0.1 (+mailto:you@example.com)"   # put a real contact; polite bots get fewer blocks
+db_path: "data/opportunities.db"
+request_timeout: 25
+min_delay_seconds: 0.7        # pause between requests to the same host
+max_description_chars: 6000
+
+filters:
+  mode: early_career           # early_career = internships/freshers/new-grad only | all = everything that passes the other filters
+  india_eligible_only: true    # India roles, eligible worldwide/Asia remote roles, or explicit international eligibility
+  india_only: false            # geographic-only filter is superseded by india_eligible_only
+  allow_global_remote: false   # legacy switch; remote alone does not prove Indian applicant eligibility
+  include_title_keywords: []   # e.g. [engineer, developer, data, ml, analyst, research]; empty = no restriction
+  exclude_title_keywords: [senior, sr, staff, principal, director, head of, vp, vice president, lead, manager, architect]
+  min_description_chars: 80    # drops stub postings
+
+# Companies you want boosted in ranking (case-insensitive, match the `company` field)
+priority_companies: []

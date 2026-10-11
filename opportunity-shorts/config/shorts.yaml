@@ -1,0 +1,67 @@
+# Shorts generation settings
+# Env vars override these where noted
+
+# LLM settings for script generation
+llm:
+  model: claude-sonnet-5-5
+  temperature: null  # Current Sonnet rejects non-default sampling parameters.
+  extra_body:
+    thinking: {type: between_tools}
+    output_config: {effort: low}
+  max_retries: 3
+  timeout_seconds: 30
+
+# Voice settings (edge-tts)
+# Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices
+voices:
+  male: en-IN-PrabhatNeural  # Indian-English male voice
+  female: en-IN-NeerjaNeural  # Indian-English female voice
+  alternate: true  # Alternate between male/female for variety
+
+# Script constraints
+script:
+  min_words: 55
+  max_words: 85
+  target_duration_seconds: 25  # Target 20-35s, aim for middle
+  max_title_chars: 100
+  hinglish_enabled: false  # Allow light Hinglish in Latin script
+
+# Visual theme settings
+theme:
+  safe_zone_bottom_percent: 22  # Leave bottom 22% free for YouTube UI
+  safe_zone_right_percent: 12   # Leave right 12% free
+  min_font_size: 56
+  max_words_per_line: 7
+  color_schemes:
+    - name: blue
+      primary: "#1a365d"
+      secondary: "#2b6cb0"
+      accent: "#4299e1"
+      text: "#ffffff"
+      background: "#f7fafc"
+    - name: purple
+      primary: "#44337a"
+      secondary: "#6b46c1"
+      accent: "#9f7aea"
+      text: "#ffffff"
+      background: "#faf5ff"
+
+# Upload and scheduling
+upload:
+  privacy: private
+  contains_synthetic_media: true
+  api_daily_upload_limit: 100
+  daily_limit: 3  # Max uploads per day (quota-aware)
+  ist_slots:
+    - "08:00"
+    - "13:00"
+    - "19:00"
+  category_id: 27  # Education category
+  made_for_kids: false
+
+# Paths (relative to project root or absolute)
+paths:
+  output_dir: "out"
+  assets_dir: "assets"
+  fonts_dir: "assets/fonts"
+  music_dir: "assets/music"

@@ -1,0 +1,15 @@
+# Manual import: use this for Internshala / Unstop / government / hackathon listings you spot yourself.
+# Run:  python -m collector manual config/manual_example.yaml
+# Required: title, company, apply_url. Everything else optional (the collector will try to extract
+# deadline / stipend / batch years from `description` if you paste the text in).
+- title: "Example Software Engineering Intern"
+  company: "Example Corp"
+  apply_url: "https://example.com/careers/123"
+  opp_type: internship          # internship | job | hackathon | fellowship | scholarship | other
+  location: "Bengaluru, India"
+  deadline: "2026-11-30"        # YYYY-MM-DD (optional)
+  stipend_text: "Rs 25,000 per month"
+  batch_years: [2027, 2028]
+  description: |
+    Paste the listing text here. Eligibility: B.Tech/BE students graduating in 2027 or 2028.
+    Last date to apply: 30 November 2026.

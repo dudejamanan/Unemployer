@@ -1,0 +1,11 @@
+data/*.db
+data/*.json
+data/source_probes/
+__pycache__/
+.pytest_cache/
+.env
+*.pyc
+.venv/
+secrets/
+out/
+.test-tmp*/
