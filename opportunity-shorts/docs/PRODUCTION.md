@@ -12,6 +12,8 @@ Add the hub URL to YouTube Studio → Customization → Profile → Links. Label
 
 ## Editorial and growth
 
+Automatic generation and immediate uploads share one priority order, including already queued videos: disclosed INR monthly-equivalent pay first, with paid openings closing within three days promoted ahead of other paid openings; otherwise pay descends from high to low. Ranges use their lower bound, annual pay is divided by 12, and deadlines break pay ties. Unknown periods and foreign currencies remain unranked rather than using invented exchange rates. Undisclosed/unranked compensation follows ranked pay. Explicit unpaid opportunities are skipped by default (`automation.priority.skip_unpaid: true`); set false to include them last. Expired and closed listings remain excluded. Manual single-video uploads follow the requested ID.
+
 Source facts determine titles, eligibility, deadlines and compensation. Narration uses local Ollama, with responsibilities-focused context and a clearly labelled general application recommendation. Raw historical dates and unnormalized durations are excluded from narration context rather than treated as graduation or eligibility facts. A hook returned separately by the model is moved into the opening narration if the employer would otherwise be absent.
 
 New videos use the logo, section labels, a visible application tip, karaoke-style caption highlighting and subtle movement. These improvements are hypotheses to measure, not proof of virality or monetization approval. Changing colours alone is not substantive originality. Review actual viewer feedback and source quality; automated validation cannot establish every prose claim.

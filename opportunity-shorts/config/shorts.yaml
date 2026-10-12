@@ -19,6 +19,9 @@ automation:
   interval_minutes: 30
   collection_interval_minutes: 15
   publishing_mode: immediate
+  priority:
+    skip_unpaid: true
+    urgent_deadline_days: 3
 
 # Voice settings (edge-tts)
 # Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices

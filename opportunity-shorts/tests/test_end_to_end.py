@@ -105,6 +105,25 @@ def test_rejected_upload_is_deferred_without_uncertain_lock(pipeline, monkeypatc
     assert datetime.fromisoformat(retry[0]).date() > datetime.now(IST).date()
 
 
+def test_channel_upload_limit_retries_within_an_hour(pipeline, monkeypatch):
+    import httplib2
+    from googleapiclient.errors import HttpError
+    p = pipeline
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    p.db.set_status(p.test_id, 'approved')
+    p.approve_video(p.test_id)
+    error = HttpError(httplib2.Response({'status': '400'}), b'{"error":{"errors":[{"reason":"uploadLimitExceeded"}]}}')
+    monkeypatch.setattr('shorts.upload.upload_video', Mock(side_effect=error))
+    before = datetime.now(IST)
+    with pytest.raises(HttpError):
+        p.upload(p.test_id)
+    retry = p.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (p.test_id,)).fetchone()
+    delay = (datetime.fromisoformat(retry[0]) - before).total_seconds()
+    assert 3590 <= delay <= 3610
+    assert p.posts.get(p.test_id).status == 'ready'
+
+
 def test_online_backup_is_restorable_and_closed(pipeline):
     import sqlite3
     from shorts.production import backup_database
@@ -300,6 +319,24 @@ def test_immediate_drains_future_queue_and_keeps_idempotency(pipeline, monkeypat
     assert run_automatic(p, empty(), upload=True)['uploaded'] == ['abcdefghijk']
     assert not run_automatic(p, empty(), upload=True)['uploaded']
     upload.assert_called_once()
+
+
+def test_new_high_paid_candidate_precedes_existing_ready_queue(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate', max_builds_per_run=1)
+    mock_media(monkeypatch)
+    p.build(p.test_id)
+    schedule(p, p.test_id, (datetime.now(IST) + timedelta(days=1)).isoformat())
+    high = Opportunity(source='manual', board='manual', external_id='high',
+        title='Data Engineering Intern', company='Higher Paid Corp',
+        location='India', apply_url='https://example.com/high',
+        description='Students can apply through the official careers page.',
+        stipend_text='INR 55000/month', opp_type='internship')
+    p.db.upsert(high)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []})
+    assert result['generated'] == [high.id]
+    assert not result['errors']
 
 
 def test_immediate_stops_generation_at_daily_quota(pipeline, monkeypatch):

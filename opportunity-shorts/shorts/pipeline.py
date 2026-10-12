@@ -212,7 +212,7 @@ class Pipeline:
             if isinstance(exc, HttpError) and 400 <= exc.resp.status < 500 and exc.resp.status != 408:
                 self.posts.update_status(card['id'], 'ready', str(exc))
                 deferred = now + timedelta(hours=1)
-                if b'quotaExceeded' in exc.content or b'uploadLimitExceeded' in exc.content:
+                if b'quotaExceeded' in exc.content:
                     deferred = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 conn.execute('INSERT OR REPLACE INTO upload_retries VALUES (?, ?, ?)',
                              (card['id'], deferred.isoformat(), str(exc)[:500]))

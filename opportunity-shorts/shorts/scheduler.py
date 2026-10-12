@@ -85,6 +85,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
     import json
     now = datetime.now(IST)
     immediate = pipeline.settings['automation'].get('publishing_mode') == 'immediate'
+    from .priority import priority_key, compensation
+    priority = pipeline.settings['automation'].get('priority', {})
     # Remove invalid queue entries even while channel access is unavailable.
     for scheduled in pipeline.posts.conn.execute('SELECT opportunity_id FROM schedules').fetchall():
         row = pipeline.db.get(scheduled['opportunity_id'])
@@ -100,6 +102,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             result['errors'].append('YouTube connection: ' + str(exc))
             upload = False
     for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
+        if immediate:
+            break  # Ready and new candidates share the same stipend priority below.
         retry = pipeline.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (row['opportunity_id'],)).fetchone()
         if retry and datetime.fromisoformat(retry['retry_after']) > now:
             continue
@@ -138,16 +142,23 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             return result
     maximum = int(pipeline.settings['automation']['max_builds_per_run'])
     queued = pipeline.posts.conn.execute('SELECT COUNT(*) FROM schedules').fetchone()[0]
-    capacity = max(0, maximum - queued)
+    capacity = maximum if immediate else max(0, maximum - queued)
     occupied = {r[0] for r in pipeline.posts.conn.execute('SELECT scheduled_at FROM schedules')}
     used_roles = {(r[0], r[1]) for r in pipeline.posts.conn.execute(
         "SELECT lower(o.company), lower(o.title) FROM opportunities o JOIN posts p ON o.id=p.opportunity_id "
         "WHERE p.status IN ('ready','uploading','posted')")}
     attempts = 0
-    for row in pipeline.db.list(status=None, limit=10000, today=now.date()):
+    candidates = pipeline.db.list(status=None, limit=10000, today=now.date())
+    candidates.sort(key=lambda row: priority_key(row, now.date(), int(priority.get('urgent_deadline_days', 3))))
+    for row in candidates:
         if attempts >= capacity:
             break
         if row['status'] not in ('new', 'approved'):
+            continue
+        if priority.get('skip_unpaid', True) and compensation(row['stipend_text'])[0] == 0:
+            continue
+        retry = pipeline.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (row['id'],)).fetchone()
+        if retry and datetime.fromisoformat(retry['retry_after']) > now:
             continue
         post = pipeline.posts.get(row['id'])
         if post and post.status == 'failed':
@@ -155,7 +166,7 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
                 continue
         if post and post.status in ('uploading', 'posted'):
             continue
-        if pipeline.posts.conn.execute('SELECT 1 FROM schedules WHERE opportunity_id=?', (row['id'],)).fetchone():
+        if not immediate and pipeline.posts.conn.execute('SELECT 1 FROM schedules WHERE opportunity_id=?', (row['id'],)).fetchone():
             continue
         role_key = (row['company'].lower(), row['title'].lower())
         if role_key in used_roles and not (post and post.status == 'ready'):
