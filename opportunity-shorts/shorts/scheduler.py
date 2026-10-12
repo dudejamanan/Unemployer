@@ -251,6 +251,10 @@ def run_daemon(config_dir=None, upload=True):
                  settings['llm']['model'], upload)
         next_collection = 0
         next_maintenance = 0
+        # Separate SQLite connections and network calls: LinkedIn cannot stall YouTube.
+        from threading import Thread
+        from .linkedin import background
+        Thread(target=background, args=(config_dir,), daemon=True, name='linkedin-publisher').start()
         health_path = lock_path.parent / 'worker-health.json'
         while True:
             collect = time.monotonic() >= next_collection

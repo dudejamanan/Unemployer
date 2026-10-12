@@ -273,3 +273,7 @@ Keep source adapters isolated, preserve original application URLs, and add meani
 ## License
 
 No project license is currently included. Add a license before distributing this repository under explicit open-source terms.
+
+## LinkedIn company-page integration
+
+An independent company-page text-post queue now runs alongside YouTube inside the worker. It uses the same ready opportunities and stipend/deadline priorities, with separate caps, retries, duplicate protection, reconciliation, and health reporting. LinkedIn publishing is enabled through Buffer, with a real company-page post verified sent. The Buffer key is stored privately in `.env`; your own LinkedIn Community Management API approval is unnecessary for this route. See [LinkedIn setup and recovery](docs/LINKEDIN.md).

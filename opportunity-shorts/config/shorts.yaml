@@ -24,6 +24,17 @@ automation:
     urgent_deadline_days: 3
 
 # Voice settings (edge-tts)
+linkedin:
+  enabled: true  # Buffer company-page publishing verified live.
+  provider: buffer
+  buffer_organization_id: "6acd43f6eef1fab19d6da040"
+  buffer_channel_id: "6acd4477778b240e2fec5985"
+  author: ""  # urn:li:organization:<numeric-page-id>
+  version: "202609"
+  daily_limit: 10
+  max_posts_per_cycle: 3
+
+# Voice settings (edge-tts)
 # Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices
 voices:
   male: en-IN-PrabhatNeural  # Indian-English male voice
