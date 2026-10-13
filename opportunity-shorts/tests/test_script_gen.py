@@ -205,6 +205,7 @@ def test_ollama_request_and_response(monkeypatch):
     assert post.call_args.args[0].endswith('/api/chat')
     body = post.call_args.kwargs['json']
     assert body['format'] == 'json' and body['stream'] is False and body['think'] is False
+    assert body['keep_alive'] == 0
     assert 'Authorization' not in post.call_args.kwargs
 
 

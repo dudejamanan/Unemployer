@@ -28,6 +28,8 @@ The free downloadable application checklist provides useful value and a reason t
 
 ## Reliability and recovery
 
+Resource management: Ollama chat requests set `keep_alive: 0`, unloading the model immediately after each response. The lightweight Ollama server remains available; the next script request reloads the same model, preserving output quality at the cost of load latency. FFmpeg/FFprobe child processes use Windows `CREATE_NO_WINDOW`. Stale listings are skipped before generation. YouTube channel-limit rejections impose a durable channel-wide cooldown, stopping further generation/upload attempts until retry time while collection and the independent LinkedIn publisher continue. A successful manual upload clears this cooldown. The health report includes `youtube_paused_until` when publication is deferred.
+
 - The current-user `UnemployerWorker` starts at Windows login. Immediate mode bypasses fixed slots for active pending videos; the worker waits a minute between cycles and refreshes sources 15 minutes after the last collection finishes. Rendering and collection can delay checks.
 - SQLite uses WAL and a 30-second busy timeout. Keep one publishing worker; the local lock only prevents duplicates on the same computer. Stop the first worker before migrating to a second laptop.
 - The worker uses rotating logs (5 MB, three previous logs), writes `data/worker-health.json` at cycle start/end, and retries failed cycles. A long-running cycle has a `working` heartbeat, not a claim of minute-by-minute liveness.
@@ -54,3 +56,7 @@ The hosted site source is in `sites/unemployer`. Rebuild its public-only snapsho
 
 
 Release validation: 107 Python tests passed (six historical placeholders skipped), including the copy-link CTA and stale-source publishing guard. Hub safety/route tests passed, and desktop/mobile search was exercised in Chromium. The deployed public API returned 443 openings from 18 successful sources and a source redirect returned HTTP 302. The new HackerRank Short rendered at 33.072 seconds, 1080x1920, H.264/AAC and uploaded as PMGllSvFWdc. Job-specific Greenhouse location now takes precedence over company-office metadata.
+
+## Publishing cadence
+
+Automatic YouTube and LinkedIn publishing are each spaced by a minimum of 144 minutes (2 hours 24 minutes). Timing persists through the database: YouTube uses the most recent successful publication, LinkedIn uses its most recent create attempt. Each automatic cycle sends at most one post when spacing is enabled; high-stipend/deadline priority still determines which candidate goes next. Limits, failures, source freshness, laptop sleep and generation time can delay publication beyond the interval. Missed time slots do not accumulate into a burst. Manual single-video uploads are explicit overrides. Adjust `automation.min_upload_interval_minutes` and `linkedin.min_post_interval_minutes` in `config/shorts.yaml`. Daily caps still apply independently.

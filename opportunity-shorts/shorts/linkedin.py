@@ -93,11 +93,28 @@ def commentary(row):
     lines += ['', clean(application_tip(row['title']), 450),
               '', 'Apply through the source listing:', url,
               '', 'Check the source for current eligibility and availability.',
-              '#Internship #EarlyCareers #Unemployer']
+              ' '.join(discovery_hashtags(row))]
     result = '\n'.join(lines)
     if len(result) > 3000:
         raise ValueError('LinkedIn commentary exceeds 3000 characters')
     return result
+
+
+def discovery_hashtags(row):
+    row = dict(row)
+    role = row.get('title', '').lower()
+    internship = row.get('opp_type') == 'internship' or 'intern' in role
+    tags = ['#Hiring', '#Jobs', '#Internships' if internship else '#FresherJobs']
+    topics = [('data science', '#DataScience'), ('machine learning', '#MachineLearning'),
+              ('python', '#Python'), ('software', '#SoftwareEngineering'),
+              ('web', '#WebDevelopment'), ('data', '#DataAnalytics'),
+              ('marketing', '#DigitalMarketing'), ('design', '#DesignJobs'),
+              ('finance', '#FinanceJobs')]
+    match = next((tag for phrase, tag in topics if phrase in role), None)
+    if match:
+        tags.append(match)
+    tags.append('#Unemployer')
+    return tags
 
 
 def publish_one(conn, row, cfg, http=requests):
@@ -199,13 +216,21 @@ def run_cycle(pipeline):
         check(cfg)
     reconcile(conn, cfg)
     now = datetime.now(timezone.utc)
+    interval = int(cfg.get('min_post_interval_minutes', 0))
+    last = conn.execute('SELECT MAX(attempted_at) FROM linkedin_attempts WHERE author=?', (cfg['author'],)).fetchone()[0]
+    if interval > 0 and last:
+        next_post = datetime.fromisoformat(last) + timedelta(minutes=interval)
+        if next_post > now:
+            return {'state': 'spacing', 'next_post_at': next_post.isoformat(),
+                'message': 'Spacing LinkedIn posts across the day'}
     blocked = conn.execute("SELECT 1 FROM linkedin_posts WHERE author=? AND status='blocked' LIMIT 1", (cfg['author'],)).fetchone()
     if blocked:
         return {'state': 'blocked', 'message': 'Resolve rejected LinkedIn authorization/payload before resuming'}
-    # Publish the same build-ready opportunities; never require YouTube success.
-    rows = conn.execute("SELECT o.* FROM opportunities o JOIN posts p ON p.opportunity_id=o.id WHERE p.status IN ('ready','uploading','posted') AND o.status!='rejected' AND o.is_open=1 AND (o.deadline IS NULL OR o.deadline>=?)", (now.astimezone(__import__('shorts.pipeline', fromlist=['IST']).IST).date().isoformat(),)).fetchall()
-    priority = pipeline.settings['automation'].get('priority', {})
+    # LinkedIn text posts do not require a video, generation, or YouTube success.
     from .pipeline import IST
+    rows = conn.execute("SELECT * FROM opportunities WHERE status IN ('new','approved','posted') AND is_open=1 AND (deadline IS NULL OR deadline>=?)",
+        (now.astimezone(IST).date().isoformat(),)).fetchall()
+    priority = pipeline.settings['automation'].get('priority', {})
     rows = sorted(rows, key=lambda r: priority_key(r, now.astimezone(IST).date(), int(priority.get('urgent_deadline_days', 3))))
     published = []
     accepted = []
@@ -220,13 +245,18 @@ def run_cycle(pipeline):
         # Per-page daily attempt cap includes ambiguous/failed creates, not only successes.
         count = conn.execute('SELECT COUNT(*) FROM linkedin_attempts WHERE author=? AND attempted_at>=?', (cfg['author'], (now-timedelta(hours=24)).isoformat())).fetchone()[0]
         if count >= int(cfg.get('daily_limit', 10)):
-            break
+            oldest = conn.execute('SELECT MIN(attempted_at) FROM linkedin_attempts WHERE author=? AND attempted_at>=?',
+                (cfg['author'], (now-timedelta(hours=24)).isoformat())).fetchone()[0]
+            return {'state': 'posting_limit', 'published': published, 'accepted': accepted,
+                'attempts_24h': count, 'daily_limit': int(cfg.get('daily_limit', 10)),
+                'next_retry_at': (datetime.fromisoformat(oldest)+timedelta(hours=24)).isoformat() if oldest else None,
+                'message': 'Local LinkedIn daily cap reached; independent of YouTube'}
         state = publish_one(conn, row, cfg)
         if state == 'posted':
             published.append(row['id'])
         elif state == 'accepted':
             accepted.append(row['id'])
-        if state in ('blocked', 'pending', 'uncertain') or len(published) + len(accepted) >= int(cfg.get('max_posts_per_cycle', 3)):
+        if state in ('blocked', 'pending', 'uncertain') or (interval > 0 and state in ('posted', 'accepted')) or len(published) + len(accepted) >= int(cfg.get('max_posts_per_cycle', 3)):
             break
     return {'state': 'running', 'published': published, 'accepted': accepted}
 

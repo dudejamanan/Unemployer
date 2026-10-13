@@ -94,6 +94,20 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (scheduled['opportunity_id'],))
     pipeline.posts.conn.commit()
     # Check channel access before consuming generation/upload quota.
+    spacing = int(pipeline.settings['automation'].get('min_upload_interval_minutes', 0))
+    if spacing > 0:
+        timestamps = [datetime.fromisoformat(r[0].replace('Z', '+00:00')) for r in pipeline.posts.conn.execute(
+            "SELECT posted_at FROM posts WHERE status='posted' AND posted_at IS NOT NULL")]
+        if timestamps:
+            next_upload = max(timestamps) + timedelta(minutes=spacing)
+            if next_upload > now:
+                result['next_upload_at'] = next_upload.isoformat()
+                return result
+    gate = pipeline.posts.conn.execute('SELECT retry_after FROM youtube_backoff WHERE channel_id=?',
+        (pipeline.settings['upload'].get('expected_channel_id', ''),)).fetchone()
+    if gate and datetime.fromisoformat(gate['retry_after']) > now:
+        result['paused_until'] = gate['retry_after']
+        return result
     if upload:
         try:
             service = youtube_service(pipeline.settings)
@@ -101,6 +115,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
         except Exception as exc:
             result['errors'].append('YouTube connection: ' + str(exc))
             upload = False
+    if spacing > 0 and result['uploaded']:
+        return result
     for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
         if immediate:
             break  # Ready and new candidates share the same stipend priority below.
@@ -117,6 +133,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             result['uploaded'].append(str(value))
             pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (card['id'],))
             pipeline.posts.conn.commit()
+            if spacing > 0:
+                return result
         except Exception as exc:
             result['errors'].append(f"{row['opportunity_id']}: {exc}")
     if immediate:
@@ -155,6 +173,10 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             break
         if row['status'] not in ('new', 'approved'):
             continue
+        checked = row['last_seen_at']
+        age_limit = int(pipeline.settings['automation'].get('max_source_age_hours', 24))
+        if not checked or datetime.fromisoformat(checked.replace('Z', '+00:00')) < now - timedelta(hours=age_limit):
+            continue  # Refresh source facts before spending time on generation.
         if priority.get('skip_unpaid', True) and compensation(row['stipend_text'])[0] == 0:
             continue
         retry = pipeline.posts.conn.execute('SELECT retry_after FROM upload_retries WHERE opportunity_id=?', (row['id'],)).fetchone()
@@ -203,8 +225,15 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
                     result['uploaded'].append(str(value))
                     pipeline.posts.conn.execute('DELETE FROM schedules WHERE opportunity_id=?', (row['id'],))
                     pipeline.posts.conn.commit()
+                    if spacing > 0:
+                        break
                 except Exception as exc:
                     result['errors'].append(f"{row['id']}: {exc}")
+                    gate = pipeline.posts.conn.execute('SELECT retry_after FROM youtube_backoff WHERE channel_id=?',
+                        (pipeline.settings['upload'].get('expected_channel_id', ''),)).fetchone()
+                    if gate and datetime.fromisoformat(gate['retry_after']) > now:
+                        result['paused_until'] = gate['retry_after']
+                        break
         except Exception as exc:
             from .models import PostRecord
             previous = pipeline.posts.get(row['id'])
@@ -279,7 +308,9 @@ def run_daemon(config_dir=None, upload=True):
                 result = run_daily(config_dir, collect=collect, upload=upload)
                 log.info(json.dumps(result))
                 atomic_json(health_path, {'state': 'idle', 'last_completed_at': datetime.now(timezone.utc).isoformat(),
-                                         'generated': len(result['generated']), 'uploaded': len(result['uploaded']), 'errors': result['errors']})
+                                         'generated': len(result['generated']), 'uploaded': len(result['uploaded']), 'errors': result['errors'],
+                                         'youtube_paused_until': result.get('paused_until'),
+                                         'youtube_next_upload_at': result.get('next_upload_at')})
                 import sys
                 if sys.stdout is not None:
                     print(json.dumps(result), flush=True)

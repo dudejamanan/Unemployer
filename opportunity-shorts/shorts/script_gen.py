@@ -220,6 +220,7 @@ The spoken voiceover must include the hook and end with the exact English CTA.
         try:
             response = requests.post(cfg['base_url'].rstrip('/') + '/api/chat', json={
                 'model': cfg['model'], 'stream': False, 'format': 'json', 'think': False,
+                'keep_alive': cfg.get('keep_alive', 0),
                 'messages': [{'role': 'system', 'content': system},
                              {'role': 'user', 'content': prompt + errors}],
                 'options': {'temperature': cfg.get('temperature', 0.6), 'num_predict': 2200,

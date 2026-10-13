@@ -339,6 +339,46 @@ def test_new_high_paid_candidate_precedes_existing_ready_queue(pipeline, monkeyp
     assert not result['errors']
 
 
+def test_channel_backoff_prevents_wasted_generation(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    until = (datetime.now(IST) + timedelta(hours=1)).isoformat()
+    p.posts.conn.execute('INSERT INTO youtube_backoff VALUES (?,?,?)',
+        (p.settings['upload'].get('expected_channel_id', ''), until, 'limit'))
+    p.posts.conn.commit()
+    build = Mock()
+    monkeypatch.setattr(p, 'build', build)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []})
+    assert result['paused_until'] == until
+    build.assert_not_called()
+
+
+def test_stale_candidate_does_not_consume_generation(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    p.db.conn.execute("UPDATE opportunities SET last_seen_at='2000-01-01T00:00:00Z'")
+    p.db.conn.commit()
+    build = Mock()
+    monkeypatch.setattr(p, 'build', build)
+    run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []})
+    build.assert_not_called()
+
+
+def test_youtube_spacing_survives_new_cycle(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate', min_upload_interval_minutes=144)
+    p.posts.conn.execute("INSERT INTO posts(opportunity_id,script_json,status,posted_at) VALUES ('previous','{}','posted',?)", (datetime.now(IST).isoformat(),))
+    p.posts.conn.commit()
+    build = Mock()
+    monkeypatch.setattr(p, 'build', build)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []})
+    assert 'next_upload_at' in result
+    build.assert_not_called()
+
+
 def test_immediate_stops_generation_at_daily_quota(pipeline, monkeypatch):
     from shorts.scheduler import run_automatic
     from datetime import timezone

@@ -11,6 +11,7 @@ llm:
   timeout_seconds: 300
   fallback_on_failure: false
   num_ctx: 4096
+  keep_alive: 0  # Unload model RAM immediately after each script request.
   num_gpu: 0  # CPU mode avoids the observed local CUDA/PTX failure.
 
 automation:
@@ -19,6 +20,7 @@ automation:
   interval_minutes: 30
   collection_interval_minutes: 15
   publishing_mode: immediate
+  min_upload_interval_minutes: 144  # Space automatic Shorts across the day.
   priority:
     skip_unpaid: true
     urgent_deadline_days: 3
@@ -32,7 +34,8 @@ linkedin:
   author: ""  # urn:li:organization:<numeric-page-id>
   version: "202609"
   daily_limit: 10
-  max_posts_per_cycle: 3
+  min_post_interval_minutes: 144
+  max_posts_per_cycle: 1
 
 # Voice settings (edge-tts)
 # Run: edge-tts --list-voices | grep "en-IN" to see available Indian-English voices

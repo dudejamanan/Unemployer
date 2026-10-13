@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import os
+
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 from pathlib import Path
 from typing import Optional
 
@@ -80,7 +83,7 @@ def assemble_video(
             "-crf", str(cfg["crf"]), "-c:a", "aac", "-b:a", cfg["audio_bitrate"],
             "-t", str(total_duration), "-movflags", "+faststart", str(output_path)]
     try:
-        subprocess.run(cmd, cwd=output_path.parent, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=600)
+        subprocess.run(cmd, cwd=output_path.parent, stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, capture_output=True, check=True, timeout=600)
     finally:
         concat_file.unlink(missing_ok=True)
     return output_path
@@ -89,7 +92,7 @@ def assemble_video(
 def _get_audio_duration(audio_path: Path) -> float:
     result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                              "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path)],
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True)
+                            stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, capture_output=True, text=True, check=True)
     duration = float(result.stdout.strip())
     if duration <= 0:
         raise ValueError("Audio duration must be positive")
@@ -102,7 +105,7 @@ assemble_with_captions = assemble_video
 def check_ffmpeg() -> bool:
     """Check if FFmpeg is available on PATH."""
     try:
-        subprocess.run(["ffmpeg", "-version"], stdin=subprocess.DEVNULL, capture_output=True, check=True)
+        subprocess.run(["ffmpeg", "-version"], stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, OSError):
         return False
@@ -111,7 +114,7 @@ def check_ffmpeg() -> bool:
 def check_ffprobe() -> bool:
     """Check if FFprobe is available on PATH."""
     try:
-        subprocess.run(["ffprobe", "-version"], stdin=subprocess.DEVNULL, capture_output=True, check=True)
+        subprocess.run(["ffprobe", "-version"], stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, OSError):
         return False

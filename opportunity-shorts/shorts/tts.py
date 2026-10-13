@@ -5,6 +5,9 @@ import hashlib
 import json
 import logging
 import subprocess
+import os
+
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -63,7 +66,7 @@ def _normalize_loudness(input_path: Path, output_path: Path) -> None:
                 "-b:a", "128k",
                 str(output_path)
             ],
-            stdin=subprocess.DEVNULL, capture_output=True, check=True
+            stdin=subprocess.DEVNULL, creationflags=_NO_WINDOW, capture_output=True, check=True
         )
     except subprocess.CalledProcessError as e:
         logger.warning(f"Loudness normalization failed: {e}")

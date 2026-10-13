@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE TABLE IF NOT EXISTS upload_retries (
     opportunity_id TEXT PRIMARY KEY, retry_after TEXT NOT NULL, reason TEXT
 );
+CREATE TABLE IF NOT EXISTS youtube_backoff (
+ channel_id TEXT PRIMARY KEY, retry_after TEXT NOT NULL, reason TEXT NOT NULL
+);
 """
 
 

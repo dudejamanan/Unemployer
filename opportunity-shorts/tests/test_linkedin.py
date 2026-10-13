@@ -111,16 +111,14 @@ def test_disabled_requires_no_credentials(conn):
     assert linkedin.run_cycle(p) == {'state': 'disabled'}
 
 
-def test_run_cycle_does_not_starve_new_posts_behind_posted_or_uncertain(conn, cfg, monkeypatch):
+def test_run_cycle_publishes_without_any_youtube_post_or_video(conn, cfg, monkeypatch):
     conn.executescript("""
       CREATE TABLE opportunities(id TEXT PRIMARY KEY,company TEXT,title TEXT,location TEXT,
        stipend_text TEXT,apply_url TEXT,deadline TEXT,last_seen_at TEXT,status TEXT,is_open INT,description TEXT);
-      CREATE TABLE posts(opportunity_id TEXT,status TEXT);
     """)
     now = datetime.now(timezone.utc).isoformat()
     for id, pay, status in [('already', 55000, 'posted'), ('held', 45000, 'uncertain'), ('fresh', 25000, None)]:
         conn.execute('INSERT INTO opportunities VALUES (?,?,?,?,?,?,?,?,?,?,?)', (id,'Example',id,'India',f'INR {pay}/month','https://example.com/'+id,None,now,'new',1,''))
-        conn.execute('INSERT INTO posts VALUES (?,?)', (id,'ready'))
         if status:
             conn.execute('INSERT INTO linkedin_posts(opportunity_id,author,status,commentary) VALUES (?,?,?,?)', (id,cfg['author'],status,'test'))
     conn.commit()
@@ -137,3 +135,23 @@ def test_run_cycle_does_not_starve_new_posts_behind_posted_or_uncertain(conn, cf
 def test_promoted_disclosure(row):
     row['description']='Sponsored: internship promotion'
     assert linkedin.commentary(row).startswith('Promoted listing')
+
+
+def test_hashtags_match_the_opportunity(row):
+    tags = linkedin.discovery_hashtags(row)
+    assert tags == ['#Hiring', '#Jobs', '#Internships', '#Python', '#Unemployer']
+    row.update(title='Finance Analyst', opp_type='job')
+    tags = linkedin.discovery_hashtags(row)
+    assert '#FresherJobs' in tags and '#FinanceJobs' in tags
+    assert '#Internships' not in tags
+
+
+def test_linkedin_spacing_uses_persisted_attempt_time(conn, cfg, monkeypatch):
+    conn.execute('INSERT INTO linkedin_attempts VALUES (?,?,?)', ('previous', cfg['author'], datetime.now(timezone.utc).isoformat()))
+    conn.commit()
+    p = Mock(); p.posts.conn = conn
+    p.settings = {'linkedin': dict(cfg, enabled=True, min_post_interval_minutes=144)}
+    monkeypatch.setattr(linkedin, 'reconcile', lambda *args: None)
+    result = linkedin.run_cycle(p)
+    assert result['state'] == 'spacing'
+    assert 'next_post_at' in result

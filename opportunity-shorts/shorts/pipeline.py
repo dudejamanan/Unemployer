@@ -216,11 +216,15 @@ class Pipeline:
                     deferred = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 conn.execute('INSERT OR REPLACE INTO upload_retries VALUES (?, ?, ?)',
                              (card['id'], deferred.isoformat(), str(exc)[:500]))
+                if b'quotaExceeded' in exc.content or b'uploadLimitExceeded' in exc.content:
+                    conn.execute('INSERT OR REPLACE INTO youtube_backoff VALUES (?, ?, ?)',
+                        (self.settings['upload'].get('expected_channel_id', ''), deferred.isoformat(), 'YouTube upload limit; generation paused'))
                 conn.commit()
             else:
                 self.posts.update_status(card['id'], 'uploading', str(exc))
             raise
         conn.execute('DELETE FROM upload_retries WHERE opportunity_id=?', (card['id'],))
+        conn.execute('DELETE FROM youtube_backoff WHERE channel_id=?', (self.settings['upload'].get('expected_channel_id', ''),))
         conn.commit()
         self.posts.set_youtube_id(card['id'], youtube_id)
         self.db.set_status(card['id'], 'posted')
