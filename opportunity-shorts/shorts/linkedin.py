@@ -210,6 +210,15 @@ def run_cycle(pipeline):
     conn.executescript(SCHEMA)
     if not cfg.get('enabled'):
         return {'state': 'disabled'}
+    if cfg.get('provider')=='buffer' and cfg.get('image_cards'):
+        # Reconcile and clean up even while posting is paused by cadence/weekends.
+        from .media_host import cleanup_optional
+        reconcile(conn,cfg)
+        cleanup_optional(conn,cfg)
+    if pipeline.settings.get('growth',{}).get('enabled'):
+        from .growth.policy import due
+        if not due(conn,pipeline.settings,'linkedin'):
+            return {'state':'spacing','message':'LinkedIn weekday/cross-format cadence active'}
     now = datetime.now(timezone.utc)
     interval = int(cfg.get('min_post_interval_minutes', 0))
     last = conn.execute('SELECT MAX(attempted_at) FROM linkedin_attempts WHERE author=?', (cfg['author'],)).fetchone()[0]
@@ -226,6 +235,10 @@ def run_cycle(pipeline):
     blocked = conn.execute("SELECT 1 FROM linkedin_posts WHERE author=? AND status='blocked' LIMIT 1", (cfg['author'],)).fetchone()
     if blocked:
         return {'state': 'blocked', 'message': 'Resolve rejected LinkedIn authorization/payload before resuming'}
+    if pipeline.settings.get('growth',{}).get('enabled'):
+        from .growth.publishing import try_publish
+        content=try_publish(pipeline,'linkedin')
+        if content['handled']:return {'state':content['state'],'content_id':content.get('content_id')}
     # LinkedIn text posts do not require a video, generation, or YouTube success.
     from .pipeline import IST
     rows = conn.execute("SELECT * FROM opportunities WHERE status IN ('new','approved','posted') AND is_open=1 AND (deadline IS NULL OR deadline>=?)",
@@ -235,6 +248,9 @@ def run_cycle(pipeline):
     published = []
     accepted = []
     for row in rows:
+        if pipeline.settings.get('growth',{}).get('enabled'):
+            from .growth.policy import diverse
+            if not diverse(conn,row,'linkedin',pipeline.settings,now):continue
         saved = conn.execute('SELECT status FROM linkedin_posts WHERE opportunity_id=? AND author=?', (row['id'], cfg['author'])).fetchone()
         if saved and saved['status'] != 'pending':
             continue  # Already posted/ambiguous items must not starve fresh candidates.
@@ -254,6 +270,10 @@ def run_cycle(pipeline):
         state = publish_one(conn, row, cfg)
         if state == 'posted':
             published.append(row['id'])
+            if pipeline.settings.get('growth',{}).get('enabled'):
+                from .growth.policy import published as log_publication
+                out=conn.execute('SELECT post_urn FROM linkedin_posts WHERE opportunity_id=? AND author=?',(row['id'],cfg['author'])).fetchone()
+                log_publication(conn,row['id'],'linkedin','opportunity_alert','opportunities',row['company'],row['title'],external_id=out[0] if out else None)
         elif state == 'accepted':
             accepted.append(row['id'])
         if state in ('blocked', 'pending', 'uncertain') or (interval > 0 and state in ('posted', 'accepted')) or len(published) + len(accepted) >= int(cfg.get('max_posts_per_cycle', 3)):

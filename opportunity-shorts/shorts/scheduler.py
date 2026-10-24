@@ -48,6 +48,9 @@ def run_daily(config_dir=None, collect=True, upload=False, manual_export=False):
             result['collected'] = {'kept': stats.kept, 'errors': stats.errors}
             result['errors'].extend(stats.errors)
             client.session.close()
+            if pipeline.settings.get('growth',{}).get('enabled'):
+                from .growth.workflow import maintenance
+                result['growth'] = maintenance(pipeline,config_dir)
         if pipeline.settings['automation']['enabled']:
             return run_automatic(pipeline, result, upload=upload, manual_export=manual_export)
         for row in pipeline.db.list(status='approved', limit=100, today=datetime.now(IST).date()):
@@ -98,6 +101,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
     if spacing > 0:
         timestamps = [datetime.fromisoformat(r[0].replace('Z', '+00:00')) for r in pipeline.posts.conn.execute(
             "SELECT posted_at FROM posts WHERE status='posted' AND posted_at IS NOT NULL")]
+        if pipeline.settings.get('growth',{}).get('enabled'):
+            timestamps += [datetime.fromisoformat(r[0].replace('Z','+00:00')) for r in pipeline.posts.conn.execute("SELECT published_at FROM content_publications WHERE platform='youtube'")]
         if timestamps:
             next_upload = max(timestamps) + timedelta(minutes=spacing)
             if next_upload > now:
@@ -118,6 +123,13 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             return result  # LinkedIn has its own thread; do not generate unusable videos.
     if spacing > 0 and result['uploaded']:
         return result
+    if upload and pipeline.settings.get('growth',{}).get('enabled'):
+        from .growth.publishing import try_publish
+        content = try_publish(pipeline,'youtube',service=service)
+        if content['handled']:
+            result['growth_publication']=content
+            if content.get('external_id'):result['uploaded'].append(content['external_id'])
+            return result
     for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
         if immediate:
             break  # Ready and new candidates share the same stipend priority below.
@@ -174,6 +186,9 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             break
         if row['status'] not in ('new', 'approved'):
             continue
+        if pipeline.settings.get('growth',{}).get('enabled'):
+            from .growth.policy import diverse
+            if not diverse(pipeline.posts.conn,row,'youtube',pipeline.settings,now):continue
         checked = row['last_seen_at']
         age_limit = int(pipeline.settings['automation'].get('max_source_age_hours', 24))
         if not checked or datetime.fromisoformat(checked.replace('Z', '+00:00')) < now - timedelta(hours=age_limit):
@@ -301,6 +316,8 @@ def run_daemon(config_dir=None, upload=True):
         from threading import Thread
         from .linkedin import background
         Thread(target=background, args=(config_dir,), daemon=True, name='linkedin-publisher').start()
+        from .growth.operations import background as growth_background
+        Thread(target=growth_background,args=(config_dir,),daemon=True,name='growth-operations').start()
         health_path = lock_path.parent / 'worker-health.json'
         while True:
             collect = time.monotonic() >= next_collection

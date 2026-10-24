@@ -76,11 +76,14 @@ def check(cfg):
     return channel
 
 
-def publish(conn, row, cfg, http=requests):
+def publish(conn, row, cfg, http=requests, _without_image=False):
     from .linkedin import SCHEMA, commentary
     author = cfg['author']
     conn.executescript(SCHEMA)
-    text = commentary(row)
+    text = row.get('content_text') if isinstance(row,dict) else None
+    text = text or commentary(row)
+    if len(text)>3000:
+        raise ValueError('LinkedIn content exceeds 3000 characters')
     # Buffer plain text must not receive LinkedIn API rich-text escaping.
     text = re.sub(r'\\([\\|{}@\[\]()<>#*_~])', r'\1', text)
     conn.execute('INSERT OR IGNORE INTO linkedin_posts(opportunity_id,author,status,commentary) VALUES (?,?,?,?)',
@@ -93,6 +96,9 @@ def publish(conn, row, cfg, http=requests):
     if saved['retry_after'] and datetime.fromisoformat(saved['retry_after']) > now:
         return 'deferred'
     headers = auth_headers()
+    from .media_host import prepare_optional
+    media_url=None if _without_image else prepare_optional(conn,row,cfg)
+    assets='[{image:{url:'+json.dumps(media_url)+'}}]' if media_url else '[]'
     reserve_request()  # Exhausted request budgets must not claim a create as uncertain.
     claim = conn.execute("UPDATE linkedin_posts SET status='publishing',commentary=?,attempted_at=?,error=NULL WHERE opportunity_id=? AND author=? AND status='pending'",
                          (text, now.isoformat(), row['id'], author))
@@ -101,8 +107,9 @@ def publish(conn, row, cfg, http=requests):
     conn.commit()
     if claim.rowcount != 1:
         return 'claimed'
-    document = 'mutation { createPost(input:{channelId:'+json.dumps(cfg['buffer_channel_id'])+',text:'+json.dumps(text)+',schedulingType:automatic,mode:shareNow,assets:[],needsApproval:false}) { __typename ... on PostActionSuccess { post { '+POST_FIELDS+' } } ... on MutationError { message } } }'
+    document = 'mutation { createPost(input:{channelId:'+json.dumps(cfg['buffer_channel_id'])+',text:'+json.dumps(text) +',schedulingType:automatic,mode:shareNow,assets:'+assets+',needsApproval:false}) { __typename ... on PostActionSuccess { post { '+POST_FIELDS+' } } ... on MutationError { message } } }'
     state, id, retry, error = 'uncertain', None, None, None
+    rejected_image=False
     try:
         response = http.post('https://api.buffer.com', headers=headers, json={'query': document}, timeout=(10,30), allow_redirects=False)
         if response.status_code == 429:
@@ -123,6 +130,9 @@ def publish(conn, row, cfg, http=requests):
                 state = 'posted' if post.get('status') == 'sent' else 'delivery_failed' if post.get('status') == 'error' else 'accepted'
             elif result.get('__typename') == 'MutationError' and not data.get('errors'):
                 state, error = 'blocked', 'Buffer rejected post; inspect Buffer dashboard and account limits'
+                # An explicit rejected create is safe to replace. A timeout/accepted
+                # delivery is never grounds for creating a second text-only post.
+                rejected_image=bool(media_url and re.search(r'\b(image|media|asset)s?\b',str(result.get('message','')),re.I))
             else:
                 error = 'Buffer create response ambiguous; reconcile before retry'
         else:
@@ -132,6 +142,14 @@ def publish(conn, row, cfg, http=requests):
     conn.execute('UPDATE linkedin_posts SET status=?,post_urn=?,retry_after=?,error=? WHERE opportunity_id=? AND author=?',
                  (state,id,retry,error,row['id'],author))
     conn.commit()
+    if rejected_image:
+        from .media_host import mark_text_only
+        mark_text_only(conn,row,cfg)
+        conn.execute("UPDATE linkedin_posts SET status='pending',retry_after=NULL WHERE opportunity_id=? AND author=?",(row['id'],author));conn.commit()
+        return publish(conn,row,cfg,http,_without_image=True)
+    if state=='posted' and cfg.get('image_cards'):
+        from .media_host import cleanup_optional
+        cleanup_optional(conn,cfg)
     return state
 
 
@@ -159,3 +177,6 @@ def reconcile(conn, cfg):
         conn.execute('UPDATE linkedin_posts SET status=?,post_urn=?,error=? WHERE opportunity_id=? AND author=?',
                      (state,post['id'],'Delivery failed; inspect Buffer, do not recreate blindly' if state=='delivery_failed' else None,row['opportunity_id'],cfg['author']))
     conn.commit()
+    if cfg.get('image_cards'):
+        from .media_host import cleanup_optional
+        cleanup_optional(conn,cfg)

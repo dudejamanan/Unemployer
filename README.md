@@ -279,3 +279,5 @@ No project license is currently included. Add a license before distributing this
 An independent company-page text-post queue now runs alongside YouTube inside the worker. It uses the same ready opportunities and stipend/deadline priorities, with separate caps, retries, duplicate protection, reconciliation, and health reporting. LinkedIn publishing is enabled through Buffer, with a real company-page post verified sent. The Buffer key is stored privately in `.env`; your own LinkedIn Community Management API approval is unnecessary for this route. See [LinkedIn setup and recovery](opportunity-shorts/docs/LINKEDIN.md).
 
 The enriched Shorts format includes a benefit-first hook, eligibility, a dated source excerpt, clearly labelled application advice, and a consistent narrator. See [content format](opportunity-shorts/docs/CONTENT_FORMAT.md).
+
+Current growth implementation: [autonomous audience engine](opportunity-shorts/docs/AUDIENCE_ENGINE.md) and [verification report](opportunity-shorts/docs/AUDIENCE_ENGINE_REPORT.md).

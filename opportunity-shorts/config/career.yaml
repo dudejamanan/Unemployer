@@ -1,0 +1,83 @@
+allowed_hosts:
+- capd.mit.edu
+- ocs.yale.edu
+- www.career.berkeley.edu
+- careerservices.fas.harvard.edu
+source_max_age_days: 14
+minimum_sources: 2
+max_quote_words_per_source: 25
+sources:
+- url: https://capd.mit.edu/channels/make-a-resume-cover-letter-cv/
+  title: MIT career documents guidance
+  authority: university
+- url: https://ocs.yale.edu/channels/cover-letters-correspondence/
+  title: Yale cover letters and correspondence
+  authority: university
+- url: https://www.career.berkeley.edu/prepare-for-success/cover-letters/
+  title: Berkeley cover letters
+  authority: university
+- url: https://careerservices.fas.harvard.edu/channels/create-a-resume-cv-or-cover-letter/
+  title: Harvard application guidance
+  authority: university
+  categories:
+  - applications
+- url: https://careerservices.fas.harvard.edu/resources/interviewing/
+  title: Harvard interview preparation
+  authority: university
+  categories:
+  - interviews
+- url: https://capd.mit.edu/channels/interview/
+  title: MIT interview preparation
+  authority: university
+  categories:
+  - interviews
+- url: https://careerservices.fas.harvard.edu/channels/build-your-network/
+  title: Harvard networking guidance
+  authority: university
+  categories:
+  - outreach
+- url: https://capd.mit.edu/channels/network/
+  title: MIT networking guidance
+  authority: university
+  categories:
+  - outreach
+topics:
+- title: Make your cover letter add something useful
+  question: How can my cover letter add evidence instead of repeating my resume?
+  category: applications
+  sources:
+  - 0
+  - 1
+  - 2
+- title: Tailor an application without inventing experience
+  question: How do I tailor my internship application honestly?
+  category: applications
+  sources:
+  - 0
+  - 1
+  - 2
+unavailable_adapters:
+  reddit: Not configured; no authorized API credentials or redistribution review
+  search_suggestions: No documented accessible suggestion API configured
+  email_digest: No sending provider or subscriber storage configured
+discovery:
+  public_discussions: true
+  faqs:
+  - category: interviews
+    question: How should I prepare examples for an internship interview?
+  - category: outreach
+    question: How can I prepare for a useful informational interview?
+  - category: research
+    question: How should I apply for a research internship?
+  - category: remote
+    question: What should I check before applying for a remote internship?
+  - category: verification
+    question: How can I verify an internship before sharing personal information?
+  - category: eligibility
+    question: How should I check internship eligibility?
+  - category: deadlines
+    question: How should I track internship application deadlines?
+  - category: paid_internships
+    question: How should I compare disclosed internship stipend terms?
+  - category: early_career
+    question: What application mistakes should an early-career candidate avoid?

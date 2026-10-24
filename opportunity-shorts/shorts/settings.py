@@ -153,6 +153,14 @@ def load_shorts_settings(config_dir: Path | str | None = None) -> dict[str, Any]
             if not Path(p).is_absolute():
                 settings["paths"][key] = str(ROOT / p)
 
+    growth=settings.get('growth',{})
+    if growth.get('enabled'):
+        for key,minimum,maximum in (('research_interval_minutes',15,1440),('guide_every_days',1,30),('guide_max_duration_seconds',20,60),('roundup_weekday',0,6)):
+            value=growth.get(key,{'research_interval_minutes':60,'guide_every_days':2,'guide_max_duration_seconds':60,'roundup_weekday':4}[key])
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not minimum<=value<=maximum:
+                raise ValueError('Invalid growth configuration: '+key)
+        for value in growth.get('diversity',{}).values():
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or not 0<=value<=720:raise ValueError('Invalid content diversity interval')
     return settings
 
 

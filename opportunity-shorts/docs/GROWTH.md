@@ -47,3 +47,7 @@ Live publishing proof: five uploads were verified public and fully processed on 
 
 
 Production release: the live public hub is https://unemployer.syrupytide17.chatgpt.site. New narration is shortened using complete generated sentences, a factual employer/role opening and an original general application recommendation; source facts remain checked. New visual treatment adds the logo, section labels, word highlighting and gentle motion. Public metrics report observations only; no viral winner or causal performance claim is made. See PRODUCTION.md for operating and commercial limits.
+
+## Current implementation
+
+For the operative cadence, autonomous research workflow, measurement provenance and integration limits, see [AUDIENCE_ENGINE.md](AUDIENCE_ENGINE.md). Earlier sections are historical strategy notes, not evidence that a feature or analytics permission is active.

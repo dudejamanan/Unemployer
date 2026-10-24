@@ -242,6 +242,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="shorts", description="YouTube Shorts generation pipeline")
     p.add_argument("--config", help="config dir (default: ./config)")
     sub = p.add_subparsers(dest="cmd", required=True)
+    from .growth.cli import register
+    register(sub)
 
     for name in ('build', 'approve-video', 'upload', 'schedule', 'reconcile-upload', 'reset-upload'):
         command = sub.add_parser(name)

@@ -18,6 +18,8 @@ def main():
     st.title('Unemployer')
     pipeline = Pipeline(os.getenv('SHORTS_CONFIG_DIR'))
     try:
+        from shorts.growth.dashboard import show
+        show(pipeline,st)
         from shorts.production import performance_report
         health_path = Path(pipeline.collector_settings['db_path']).parent / 'worker-health.json'
         with st.expander('Operations and video performance'):

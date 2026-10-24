@@ -35,6 +35,8 @@ class Pipeline:
         self.collector_settings = load_settings(config_dir)
         self.db = Database(self.collector_settings['db_path'])
         self.posts = PostStore(self.collector_settings['db_path'])
+        from .growth.store import migrate
+        migrate(self.posts.conn)
 
     def close(self):
         self.posts.close()
@@ -233,4 +235,6 @@ class Pipeline:
         conn.commit()
         self.posts.set_youtube_id(card['id'], youtube_id)
         self.db.set_status(card['id'], 'posted')
+        from .growth.policy import published
+        published(conn,card['id'],'youtube','opportunity_alert','opportunities',card['company'],card['role'],script.hook,youtube_id)
         return youtube_id

@@ -279,3 +279,11 @@ No project license is currently included. Add a license before distributing this
 An independent company-page text-post queue now runs alongside YouTube inside the worker. It uses the same ready opportunities and stipend/deadline priorities, with separate caps, retries, duplicate protection, reconciliation, and health reporting. LinkedIn publishing is enabled through Buffer, with a real company-page post verified sent. The Buffer key is stored privately in `.env`; your own LinkedIn Community Management API approval is unnecessary for this route. See [LinkedIn setup and recovery](docs/LINKEDIN.md).
 
 The enriched Shorts format includes a benefit-first hook, eligibility, a dated source excerpt, clearly labelled application advice, and a consistent narrator. See [content format](docs/CONTENT_FORMAT.md).
+
+## Autonomous audience engine
+
+The current audience engine adds source-backed career guides and weekly roundups alongside opportunity alerts, shared publication spacing, diversity controls and dated measurement history. It uses local Ollama and automated evidence validation; no human approval is required. See [operations and recovery](docs/AUDIENCE_ENGINE.md), [implementation report](docs/AUDIENCE_ENGINE_REPORT.md), and [partnership groundwork](docs/OUTREACH.md). Email signup and owner-only analytics remain explicit integration boundaries.
+
+LinkedIn opportunity posts can now include generated cards through [temporary authenticated media hosting](docs/MEDIA_HOSTING.md), with source images deleted after confirmed publication.
+
+Owner Analytics, autonomous topic discovery, published-guide synchronization and daily/weekly growth reporting are documented in [the distribution upgrade](docs/DISTRIBUTION_UPGRADE.md).

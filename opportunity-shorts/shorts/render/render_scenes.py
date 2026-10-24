@@ -17,6 +17,7 @@ SCENE_TEMPLATES = {
     "hook": "hook_scene.html",
     "facts": "facts_scene.html",
     "role": "role_scene.html",
+    "guide": "guide_scene.html",
     "deadline": "deadline_scene.html",
     "cta": "cta_scene.html",
 }
@@ -103,7 +104,7 @@ def render_scene(
     context = {
         'brand_logo': 'data:image/png;base64,' + base64.b64encode(logo_path.read_bytes()).decode('ascii') if logo_path.exists() else '',
         'application_tip': application_tip(script.on_screen.role).removeprefix('Application tip: '),
-        'scene_label': {'hook': 'THE OPPORTUNITY', 'facts': 'IS THIS FOR YOU?', 'role': 'INSIDE THE ROLE', 'deadline': 'APPLY SMARTER', 'cta': 'YOUR NEXT STEP'}[scene_type],
+        'scene_label': {'hook': 'THE OPPORTUNITY', 'facts': 'IS THIS FOR YOU?', 'role': 'INSIDE THE ROLE', 'deadline': 'APPLY SMARTER', 'cta': 'YOUR NEXT STEP'}.get(scene_type,'CAREER GUIDE'),
         **settings.get('enrichment', {}),
         "company": script.on_screen.company,
         "role": script.on_screen.role,

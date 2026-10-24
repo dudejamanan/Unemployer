@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block content %}
+<div class="eyebrow">{{ label }}</div><h1 style="font-size:64px">{{ heading }}</h1>
+<div class="panel"><p style="font-size:48px">{{ body }}</p></div>
+{% if source_title %}<div class="source-meta">{{ source_title }}<br>{{ source_domain }} · retrieved {{ source_date }}</div>{% endif %}
+{% endblock %}

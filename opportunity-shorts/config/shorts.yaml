@@ -20,13 +20,14 @@ automation:
   interval_minutes: 30
   collection_interval_minutes: 15
   publishing_mode: immediate
-  min_upload_interval_minutes: 144  # Space automatic Shorts across the day.
+  min_upload_interval_minutes: 720  # Controlled audience experiment: up to two Shorts/day.
   priority:
     skip_unpaid: true
     urgent_deadline_days: 3
 
 # Voice settings (edge-tts)
 linkedin:
+  image_cards: true  # Hosted privately; source image deleted after confirmed delivery.
   enabled: true  # Buffer company-page publishing verified live.
   provider: buffer
   buffer_organization_id: "6acd43f6eef1fab19d6da040"
@@ -34,7 +35,7 @@ linkedin:
   author: ""  # urn:li:organization:<numeric-page-id>
   version: "202609"
   daily_limit: 50  # Buffer reports 50; 144-minute spacing still yields about 10/day.
-  min_post_interval_minutes: 144
+  min_post_interval_minutes: 1440  # One useful company-page post per weekday.
   max_posts_per_cycle: 1
 
 # Voice settings (edge-tts)
@@ -80,6 +81,19 @@ captions:
 business:
   contact_email: mananndudeja@gmail.com
   hub_url: "https://unemployer.syrupytide17.chatgpt.site"
+
+growth:
+  prospect_preparation_limit: 15  # Research only; no automatic outbound messaging.
+  enabled: true
+  autonomous: true
+  research_interval_minutes: 60
+  guide_every_days: 2
+  guide_max_duration_seconds: 60
+  roundup_weekday: 4  # Friday; only if three credible fresh paid openings exist.
+  linkedin_weekdays_only: true
+  diversity:
+    company_hours: 24
+    role_hours: 72
 
 # Upload and scheduling
 upload:
