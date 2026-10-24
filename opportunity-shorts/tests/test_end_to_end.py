@@ -470,3 +470,15 @@ def test_dashboard_review(pipeline, monkeypatch):
     button.click().run()
     assert not app.exception
     assert pipeline.db.get(pipeline.test_id)['status'] == 'approved'
+
+
+def test_expired_youtube_connection_stops_generation(pipeline, monkeypatch):
+    from shorts.scheduler import run_automatic
+    p = pipeline
+    p.settings['automation'].update(enabled=True, publishing_mode='immediate')
+    monkeypatch.setattr('shorts.upload.youtube_service', Mock(side_effect=ValueError('YouTube authorization expired')))
+    build = Mock()
+    monkeypatch.setattr(p, 'build', build)
+    result = run_automatic(p, {'generated': [], 'uploaded': [], 'errors': []}, upload=True)
+    assert result['youtube_connection_blocked'] is True
+    build.assert_not_called()

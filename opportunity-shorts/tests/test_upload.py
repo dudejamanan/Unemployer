@@ -56,3 +56,24 @@ def test_promoted_listing_requires_disclosure(tmp_path):
     assert args['body']['paidProductPlacementDetails']['hasPaidProductPlacement']
     script.description = script.description.replace('Promoted listing', '')
     assert not validate_script(script, data)[0]
+
+
+@pytest.mark.parametrize('allowed', [True, False])
+def test_cover_thumbnail_does_not_change_video_upload_success(tmp_path, allowed):
+    import json
+    video = tmp_path / 'video.mp4'
+    video.write_bytes(b'fixture')
+    (tmp_path / 'thumbnail.png').write_bytes(b'image fixture')
+    settings = load_shorts_settings()
+    settings['upload']['set_thumbnail'] = True
+    service = Mock()
+    service.videos().insert().next_chunk.return_value = (None, {'id': 'abcdefghijk'})
+    if allowed:
+        service.thumbnails().set().execute.return_value = {'items': [{'default': {'url': 'https://example.com/image'}}]}
+    else:
+        service.thumbnails().set().execute.side_effect = PermissionError('Not eligible')
+    result = upload_video(PostRecord('example', '{}', video_path=str(video)), _template_fallback(card(), settings), settings, service)
+    assert result == 'abcdefghijk'
+    record = json.loads((tmp_path / 'thumbnail-upload.json').read_text())
+    assert record['status'] == ('set' if allowed else 'unavailable')
+    assert service.thumbnails().set.call_args.kwargs['videoId'] == 'abcdefghijk'

@@ -15,6 +15,9 @@ def export_manual(post, script, settings):
     folder = Path(settings['paths']['output_dir']) / 'exports' / datetime.now(IST).date().isoformat() / post.opportunity_id
     folder.mkdir(parents=True, exist_ok=True)
     shutil.copy2(post.video_path, folder / 'video.mp4')
+    thumbnail = Path(post.video_path).parent / 'thumbnail.png'
+    if thumbnail.is_file():
+        shutil.copy2(thumbnail, folder / 'thumbnail.png')
     (folder / 'title.txt').write_text(script.title, encoding='utf-8')
     (folder / 'description.txt').write_text(script.description, encoding='utf-8')
     (folder / 'upload_settings.json').write_text(json.dumps({
@@ -29,6 +32,7 @@ def export_manual(post, script, settings):
 def youtube_service(settings, interactive=False):
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
+    from google.auth.exceptions import RefreshError
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
     from google_auth_httplib2 import AuthorizedHttp
@@ -38,14 +42,20 @@ def youtube_service(settings, interactive=False):
     if credentials and not credentials.has_scopes(SCOPES):
         credentials = None
     if credentials and credentials.expired and credentials.refresh_token:
-        credentials.refresh(Request())
+        try:
+            credentials.refresh(Request())
+        except RefreshError:
+            if not interactive:
+                raise ValueError('YouTube authorization expired or revoked; run python -m shorts auth to reconnect') from None
+            credentials = None
     if not credentials or not credentials.valid:
         if not interactive:
             raise ValueError('Run python -m shorts auth to authorize YouTube first')
         secrets = settings.get('youtube_client_secrets_file')
         if not secrets or not Path(secrets).is_file():
             raise ValueError('Set YOUTUBE_CLIENT_SECRETS_FILE to a Desktop OAuth client JSON')
-        credentials = InstalledAppFlow.from_client_secrets_file(secrets, SCOPES).run_local_server(port=0)
+        credentials = InstalledAppFlow.from_client_secrets_file(secrets, SCOPES).run_local_server(
+            port=0, timeout_seconds=300, prompt='consent', authorization_prompt_message='')
     token.parent.mkdir(parents=True, exist_ok=True)
     token.write_text(credentials.to_json(), encoding='utf-8')
     service = build('youtube', 'v3', http=AuthorizedHttp(credentials, http=httplib2.Http(timeout=30)), cache_discovery=False)
@@ -87,7 +97,34 @@ def upload_video(post, script, settings, service=None):
         _, response = request.next_chunk(num_retries=3)
     if not response.get('id'):
         raise RuntimeError('Upload response contains no video ID; reconcile in YouTube Studio')
+    thumbnail = Path(post.video_path).parent / 'thumbnail.png'
+    if settings['upload'].get('set_thumbnail', False) and thumbnail.is_file():
+        # Thumbnail eligibility/errors must never turn a successful video into a retry.
+        set_cover_thumbnail(response['id'], thumbnail, settings, service)
     return response['id']
+
+
+def set_cover_thumbnail(video_id, image_path, settings, service=None):
+    """Best-effort custom cover; Shorts/channel eligibility is decided by YouTube."""
+    from googleapiclient.http import MediaFileUpload
+    result = {'video_id': video_id, 'status': 'unavailable'}
+    try:
+        service = service or youtube_service(settings)
+        response = service.thumbnails().set(videoId=video_id,
+            media_body=MediaFileUpload(str(image_path), mimetype='image/png', resumable=False)).execute()
+        if isinstance(response, dict) and response.get('items'):
+            result['status'] = 'set'
+        else:
+            result['message'] = 'YouTube did not confirm a custom thumbnail; select the opening frame in the app'
+    except Exception as exc:
+        result['message'] = 'Custom thumbnail unavailable; video upload preserved. Select the opening frame in YouTube.'
+        result['error_type'] = type(exc).__name__
+    try:
+        from .production import atomic_json
+        atomic_json(Path(image_path).parent / 'thumbnail-upload.json', result)
+    except OSError:
+        pass
+    return result
 
 
 def reconcile_pending(pipeline, service):

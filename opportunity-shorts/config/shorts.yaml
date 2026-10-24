@@ -33,7 +33,7 @@ linkedin:
   buffer_channel_id: "6acd4477778b240e2fec5985"
   author: ""  # urn:li:organization:<numeric-page-id>
   version: "202609"
-  daily_limit: 10
+  daily_limit: 50  # Buffer reports 50; 144-minute spacing still yields about 10/day.
   min_post_interval_minutes: 144
   max_posts_per_cycle: 1
 
@@ -42,7 +42,7 @@ linkedin:
 voices:
   male: en-IN-PrabhatNeural  # Indian-English male voice
   female: en-IN-NeerjaNeural  # Indian-English female voice
-  alternate: true  # Alternate between male/female for variety
+  alternate: false  # Consistent narrator for the enriched opportunity series.
 
 # Script constraints
 script:
@@ -83,6 +83,7 @@ business:
 
 # Upload and scheduling
 upload:
+  set_thumbnail: true  # Best-effort; YouTube decides Shorts/channel eligibility.
   privacy: public
   contains_synthetic_media: true
   api_daily_upload_limit: 100

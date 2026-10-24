@@ -52,6 +52,7 @@ def test_estimate_word_timestamps_empty():
 def test_voice_alternation():
     """Test voice alternation based on post index."""
     settings = load_shorts_settings()
+    settings['voices']['alternate'] = True
 
     voice0 = get_voice_for_post(0, settings)
     voice1 = get_voice_for_post(1, settings)

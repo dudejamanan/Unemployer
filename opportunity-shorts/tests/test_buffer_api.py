@@ -58,3 +58,14 @@ def test_company_page_identity_check(cfg,monkeypatch):
     monkeypatch.setattr(buffer_api,'channels',lambda *a: [dict(id='channel',service='linkedin',type='profile',isDisconnected=False,isLocked=False,isQueuePaused=False)])
     with pytest.raises(ValueError,match='company page'):
         buffer_api.check(cfg)
+
+
+def test_unresolved_posts_do_not_poll_every_cycle(conn,row,cfg,monkeypatch):
+    http=Mock(); http.post.side_effect=requests.Timeout()
+    assert buffer_api.publish(conn,row,cfg,http)=='uncertain'
+    read=Mock(return_value={'posts':{'edges':[]}})
+    monkeypatch.setattr(buffer_api,'query',read)
+    buffer_api.reconcile(conn,cfg)
+    buffer_api.reconcile(conn,cfg)
+    read.assert_called_once()
+    assert conn.execute('SELECT status FROM linkedin_posts').fetchone()[0]=='uncertain'

@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 SCENE_TEMPLATES = {
     "hook": "hook_scene.html",
     "facts": "facts_scene.html",
+    "role": "role_scene.html",
     "deadline": "deadline_scene.html",
     "cta": "cta_scene.html",
 }
 
 # Layout rotation sequence (scene types in order)
-LAYOUT_SEQUENCE = ["hook", "facts", "deadline", "cta"]
+LAYOUT_SEQUENCE = ["hook", "facts", "role", "deadline", "cta"]
 
 
 def _get_template_dir(settings: dict) -> Path:
@@ -43,6 +44,20 @@ def _extract_domain(url: str) -> str:
         return parsed.netloc.replace("www.", "")
     except:
         return url
+
+
+def cover_compensation(text):
+    """Presentation-only INR formatting; preserve qualifiers and ranges."""
+    import re
+    from decimal import Decimal
+    match = re.fullmatch(r'\s*(up to\s+)?(?:INR|Rs\.?|₹)\s*(\d[\d,]*(?:\.\d+)?)(?:\s*[-–]\s*(\d[\d,]*(?:\.\d+)?))?\s*(?:/|per)?\s*(month|monthly|year|yearly|annum)\s*', text or '', re.I)
+    if not match:
+        return text or '', ''
+    qualifier, low, high, period = match.groups()
+    amount = ('Up to ' if qualifier else '') + '₹' + format(Decimal(low.replace(',', '')), ',')
+    if high:
+        amount += '–' + format(Decimal(high.replace(',', '')), ',')
+    return amount, 'per month' if period.lower() in ('month', 'monthly') else 'per year'
 
 
 def render_scene(
@@ -84,14 +99,18 @@ def render_scene(
     # Prepare context
     from ..editorial import application_tip
     logo_path = Path(settings['paths']['assets_dir']) / 'branding' / 'unemployer-logo.png'
+    cover_amount, cover_period = cover_compensation(script.on_screen.stipend)
     context = {
         'brand_logo': 'data:image/png;base64,' + base64.b64encode(logo_path.read_bytes()).decode('ascii') if logo_path.exists() else '',
         'application_tip': application_tip(script.on_screen.role).removeprefix('Application tip: '),
-        'scene_label': {'hook': 'THE OPPORTUNITY', 'facts': 'KEY FACTS', 'deadline': 'APPLICATION TIP', 'cta': 'YOUR NEXT STEP'}[scene_type],
+        'scene_label': {'hook': 'THE OPPORTUNITY', 'facts': 'IS THIS FOR YOU?', 'role': 'INSIDE THE ROLE', 'deadline': 'APPLY SMARTER', 'cta': 'YOUR NEXT STEP'}[scene_type],
+        **settings.get('enrichment', {}),
         "company": script.on_screen.company,
         "role": script.on_screen.role,
         "location": script.on_screen.location,
         "stipend": script.on_screen.stipend,
+        'cover_amount': cover_amount,
+        'cover_period': cover_period,
         "eligibility": script.on_screen.eligibility,
         "deadline_badge": script.on_screen.deadline_badge,
         "cta": script.on_screen.cta,
@@ -164,6 +183,11 @@ def render_all_scenes(
         scene_path = render_scene(scene_type, script, theme, output_path, apply_url, settings)
         scene_paths.append(scene_path)
 
+    # The thumbnail is the actual opening scene, not a different promise/image.
+    import shutil
+    if scene_paths and scene_paths[0].is_file():
+        shutil.copy2(scene_paths[0], output_dir.parent / 'thumbnail.png')
+
     return scene_paths
 
 
@@ -186,16 +210,14 @@ def get_scene_specs(
     settings = settings or load_shorts_settings()
     num_scenes = len(LAYOUT_SEQUENCE)
 
-    # Distribute time evenly among scenes (simple approach)
-    # In future, could align with voiceover line breaks
-    base_duration = voiceover_duration / num_scenes
+    weights = [0.10, 0.22, 0.28, 0.25, 0.15] if num_scenes == 5 else [1 / num_scenes] * num_scenes
 
     specs = []
     for i, scene_type in enumerate(LAYOUT_SEQUENCE):
         specs.append({
             "scene_number": i,
             "layout_name": scene_type,
-            "duration_seconds": base_duration,
+            "duration_seconds": voiceover_duration * weights[i],
             "theme_index": i % len(settings["theme"]["color_schemes"]),
         })
 

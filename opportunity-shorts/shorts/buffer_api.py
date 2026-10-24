@@ -69,6 +69,9 @@ def check(cfg):
         raise BufferError('Buffer target must be a LinkedIn company page')
     if channel['isDisconnected'] or channel['isLocked'] or channel['isQueuePaused']:
         raise BufferError('Buffer LinkedIn page is disconnected, locked or paused; reconnect/unpause in Buffer')
+    limits = query('query { dailyPostingLimits(input:{channelIds:['+json.dumps(cfg['buffer_channel_id'])+']}) { channelId isAtLimit limit sent scheduled } }').get('dailyPostingLimits', [])
+    if any(item.get('isAtLimit') for item in limits if item.get('channelId') == cfg['buffer_channel_id']):
+        raise BufferError('Buffer company-page daily posting limit reached; retry after allowance resets')
     _channel_cache[cache_key] = (time.monotonic(), channel)
     return channel
 
@@ -136,6 +139,14 @@ def reconcile(conn, cfg):
     rows = conn.execute("SELECT * FROM linkedin_posts WHERE author=? AND status IN ('publishing','uncertain','accepted')", (cfg['author'],)).fetchall()
     if not rows:
         return
+    conn.execute('CREATE TABLE IF NOT EXISTS buffer_reconcile_checks(author TEXT PRIMARY KEY, next_check_at TEXT NOT NULL)')
+    now = datetime.now(timezone.utc)
+    previous = conn.execute('SELECT next_check_at FROM buffer_reconcile_checks WHERE author=?', (cfg['author'],)).fetchone()
+    if previous and datetime.fromisoformat(previous[0]) > now:
+        return
+    conn.execute('INSERT OR REPLACE INTO buffer_reconcile_checks VALUES (?,?)',
+        (cfg['author'], (now + timedelta(hours=1)).isoformat()))
+    conn.commit()  # Failed lookups also back off; avoid draining the API budget.
     # Bounded author-channel scan includes scheduled, sent and failed Buffer posts.
     data = query('query { posts(first:100,input:{organizationId:'+json.dumps(cfg['buffer_organization_id'])+',filter:{channelIds:['+json.dumps(cfg['buffer_channel_id'])+']},sort:[{field:createdAt,direction:desc}]}) { edges { node { '+POST_FIELDS+' } } } }')
     found = [e['node'] for e in (data.get('posts') or {}).get('edges', [])]

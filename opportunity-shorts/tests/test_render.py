@@ -26,8 +26,15 @@ def test_extract_domain():
 
 def test_layout_sequence():
     """Test that layout sequence is defined."""
-    assert LAYOUT_SEQUENCE == ["hook", "facts", "deadline", "cta"]
-    assert len(LAYOUT_SEQUENCE) == 4
+    assert LAYOUT_SEQUENCE == ["hook", "facts", "role", "deadline", "cta"]
+    assert len(LAYOUT_SEQUENCE) == 5
+
+
+def test_cover_preserves_compensation_qualifiers():
+    from shorts.render.render_scenes import cover_compensation
+    assert cover_compensation('INR 45000 / monthly') == ('₹45,000', 'per month')
+    assert cover_compensation('Up to INR 5000-20000/month') == ('Up to ₹5,000–20,000', 'per month')
+    assert cover_compensation('USD 5000/year') == ('USD 5000/year', '')
 
 
 def test_scene_templates():
@@ -72,11 +79,12 @@ def test_get_scene_specs():
 
     specs = get_scene_specs(script, 25.0)
 
-    assert len(specs) == 4
+    assert len(specs) == 5
     assert specs[0]["layout_name"] == "hook"
     assert specs[1]["layout_name"] == "facts"
-    assert specs[2]["layout_name"] == "deadline"
-    assert specs[3]["layout_name"] == "cta"
+    assert specs[2]["layout_name"] == "role"
+    assert specs[3]["layout_name"] == "deadline"
+    assert specs[4]["layout_name"] == "cta"
 
     # Check duration distribution
     total_duration = sum(s["duration_seconds"] for s in specs)

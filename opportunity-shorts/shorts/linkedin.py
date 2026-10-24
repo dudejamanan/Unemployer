@@ -210,11 +210,6 @@ def run_cycle(pipeline):
     conn.executescript(SCHEMA)
     if not cfg.get('enabled'):
         return {'state': 'disabled'}
-    headers(cfg)
-    if cfg.get('provider') == 'buffer':
-        from .buffer_api import check
-        check(cfg)
-    reconcile(conn, cfg)
     now = datetime.now(timezone.utc)
     interval = int(cfg.get('min_post_interval_minutes', 0))
     last = conn.execute('SELECT MAX(attempted_at) FROM linkedin_attempts WHERE author=?', (cfg['author'],)).fetchone()[0]
@@ -223,6 +218,11 @@ def run_cycle(pipeline):
         if next_post > now:
             return {'state': 'spacing', 'next_post_at': next_post.isoformat(),
                 'message': 'Spacing LinkedIn posts across the day'}
+    headers(cfg)
+    if cfg.get('provider') == 'buffer':
+        from .buffer_api import check
+        check(cfg)
+    reconcile(conn, cfg)
     blocked = conn.execute("SELECT 1 FROM linkedin_posts WHERE author=? AND status='blocked' LIMIT 1", (cfg['author'],)).fetchone()
     if blocked:
         return {'state': 'blocked', 'message': 'Resolve rejected LinkedIn authorization/payload before resuming'}

@@ -1,1 +1,8 @@
-{% extends "base.html" %}{% block content %}<div class="badge">{{ stipend if stipend else deadline_badge }}</div><h1>{{ company }}</h1><h2>{{ role }}</h2>{% if location %}<p>{{ location }}</p>{% endif %}{% endblock %}
+{% extends "base.html" %}{% block content %}
+<div class="eyebrow">{% if stipend %}LISTED COMPENSATION{% else %}CAREER OPPORTUNITY{% endif %}</div>
+{% if stipend %}<div><div class="cover-pay">{{ cover_amount }}</div>{% if cover_period %}<div class="cover-company">{{ cover_period }}</div>{% endif %}</div>{% endif %}
+<h1 class="cover-role">{{ role }}</h1>
+<div class="cover-company">{{ company }}</div>
+{% if location %}<div class="cover-location">{{ location }}</div>{% endif %}
+{% if not stipend %}<div class="cover-note">Compensation not disclosed</div>{% endif %}
+{% endblock %}

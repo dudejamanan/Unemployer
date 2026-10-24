@@ -114,7 +114,8 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
             result['uploaded'].extend(reconcile_pending(pipeline, service))
         except Exception as exc:
             result['errors'].append('YouTube connection: ' + str(exc))
-            upload = False
+            result['youtube_connection_blocked'] = True
+            return result  # LinkedIn has its own thread; do not generate unusable videos.
     if spacing > 0 and result['uploaded']:
         return result
     for row in pipeline.posts.conn.execute('SELECT * FROM schedules ORDER BY scheduled_at').fetchall():
@@ -243,6 +244,20 @@ def run_automatic(pipeline, result, upload=False, manual_export=False):
     return result
 
 
+def wait_for_worker_lock(acquire, attempts=30, sleep=None):
+    """Allow a stopped worker time to release its OS lock during a restart."""
+    import time
+    sleep = sleep or time.sleep
+    for attempt in range(attempts):
+        try:
+            acquire()
+            return True
+        except (PermissionError, BlockingIOError):
+            if attempt + 1 < attempts:
+                sleep(1)
+    return False
+
+
 def run_daemon(config_dir=None, upload=True):
     """Single local worker with configurable collection and immediate publishing."""
     import json
@@ -258,13 +273,15 @@ def run_daemon(config_dir=None, upload=True):
     lock_path = Path(load_settings(config_dir)['db_path']).with_suffix('.worker.lock')
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open('a+b') as lock:
-        lock.seek(0)
-        lock.write(b'0')
-        lock.flush()
+        lock.seek(0, 2)
+        if lock.tell() == 0:
+            lock.write(b'0')
+            lock.flush()
         lock.seek(0)
         if os.name == 'nt':
             import msvcrt
-            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            if not wait_for_worker_lock(lambda: msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)):
+                return  # Another worker still owns publishing; never duplicate it.
         else:
             import fcntl
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

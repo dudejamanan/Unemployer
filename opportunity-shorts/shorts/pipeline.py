@@ -128,7 +128,12 @@ class Pipeline:
             else:
                 audio = asyncio.run(generate_tts(' '.join(l.text for l in script.voiceover_lines),
                     get_voice_for_post(voice_index, self.settings), self.settings))
-            scenes = render_all_scenes(script, folder / 'scenes', card['apply_url'], self.settings, voice_index)
+            from .editorial import evidence_panel
+            source_row = self.db.get(card['id'])
+            enrichment = evidence_panel(card, source_row['last_seen_at'] if source_row else '')
+            (folder / 'source-evidence.json').write_text(json.dumps(enrichment, ensure_ascii=False, indent=2), encoding='utf-8')
+            render_settings = {**self.settings, 'enrichment': enrichment}
+            scenes = render_all_scenes(script, folder / 'scenes', card['apply_url'], render_settings, voice_index)
             music = self.settings['assembly'].get('music_file')
             if music and not Path(music).is_absolute():
                 from collector.config import ROOT

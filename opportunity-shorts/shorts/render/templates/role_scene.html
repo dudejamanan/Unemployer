@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block content %}
+{% if source_excerpt %}
+<div class="panel evidence-panel"><div class="eyebrow">{{ source_label }}</div><p class="excerpt">“{{ source_excerpt }}”</p><div class="source-meta">{{ domain }}{% if source_checked %}<br>Last collected {{ source_checked }}{% endif %}</div></div>
+{% else %}<div class="panel"><h2>Check the actual responsibilities.</h2><p>The source page has the full role details.</p></div>{% endif %}
+{% if role_explainer %}<div class="explainer"><div class="eyebrow">IN PLAIN ENGLISH · GENERAL EXPLANATION</div><p>{{ role_explainer }}</p></div>{% endif %}
+{% endblock %}

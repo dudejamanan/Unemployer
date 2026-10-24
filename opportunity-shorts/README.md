@@ -27,7 +27,7 @@ The local worker handles collection and video publishing. A separate hosted webs
 - **Opportunity discovery:** 23 configured targets across company career boards, public catalogues, and selected employer pages.
 - **Eligibility filtering:** India locations and explicitly eligible international or remote roles, with senior-role, expiry, and suspicious-listing filters.
 - **Local script generation:** Ollama narration with factual employer/role hooks, application guidance, relevant hashtags, and a light Hinglish preference with English permitted.
-- **Branded video production:** four HTML scenes, Indian-English narration, highlighted captions, subtle motion, normalized audio, and vertical H.264/AAC output.
+- **Branded video production:** five HTML scenes with source evidence, Indian-English narration, highlighted captions, subtle motion, normalized audio, and vertical H.264/AAC output.
 - **Automatic publishing:** active queued videos publish as soon as processing allows, with no per-video approval in automatic mode.
 - **Operational safeguards:** duplicate prevention, source freshness checks, upload reconciliation, retry cooldowns, rotating logs, health reports, and database backups.
 - **Public opportunity hub:** searchable listings, application redirects, a free checklist, and sponsorship contact.
@@ -277,3 +277,5 @@ No project license is currently included. Add a license before distributing this
 ## LinkedIn company-page integration
 
 An independent company-page text-post queue now runs alongside YouTube inside the worker. It uses the same ready opportunities and stipend/deadline priorities, with separate caps, retries, duplicate protection, reconciliation, and health reporting. LinkedIn publishing is enabled through Buffer, with a real company-page post verified sent. The Buffer key is stored privately in `.env`; your own LinkedIn Community Management API approval is unnecessary for this route. See [LinkedIn setup and recovery](docs/LINKEDIN.md).
+
+The enriched Shorts format includes a benefit-first hook, eligibility, a dated source excerpt, clearly labelled application advice, and a consistent narrator. See [content format](docs/CONTENT_FORMAT.md).

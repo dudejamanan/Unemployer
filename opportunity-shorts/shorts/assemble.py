@@ -50,7 +50,8 @@ def assemble_video(
     concat_file = output_path.with_suffix(".concat.txt")
     boundaries = [0.0]
     for i in range(1, len(scene_paths)):
-        target = total_duration * i / len(scene_paths)
+        fractions = [0.10, 0.32, 0.60, 0.85] if len(scene_paths) == 5 else None
+        target = total_duration * (fractions[i-1] if fractions else i / len(scene_paths))
         candidates = [float(t["start"]) for t in word_timestamps
                       if boundaries[-1] + cfg["min_scene_seconds"] < float(t["start"]) < total_duration]
         boundaries.append(min(candidates, key=lambda t: abs(t-target)) if candidates else target)

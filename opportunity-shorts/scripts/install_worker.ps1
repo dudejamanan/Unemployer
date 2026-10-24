@@ -10,8 +10,9 @@ if (Test-Path -LiteralPath $hiddenPythonPath) { $taskPythonPath = $hiddenPythonP
 $workerScriptPath = Join-Path $PSScriptRoot 'worker.py'
 $taskAction = New-ScheduledTaskAction -Execute $taskPythonPath -Argument ('"' + $workerScriptPath + '"') -WorkingDirectory $projectPath
 $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
+$recoveryTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
 $taskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
 $taskPrincipal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName 'UnemployerWorker' -Action $taskAction -Trigger $taskTrigger -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
+Register-ScheduledTask -TaskName 'UnemployerWorker' -Action $taskAction -Trigger @($taskTrigger, $recoveryTrigger) -Settings $taskSettings -Principal $taskPrincipal -Force | Out-Null
 Start-ScheduledTask -TaskName 'UnemployerWorker'
 Write-Output 'Worker installed and started. Log: data/opportunities.worker.log. The computer must stay awake and connected.'

@@ -60,3 +60,7 @@ Release validation: 107 Python tests passed (six historical placeholders skipped
 ## Publishing cadence
 
 Automatic YouTube and LinkedIn publishing are each spaced by a minimum of 144 minutes (2 hours 24 minutes). Timing persists through the database: YouTube uses the most recent successful publication, LinkedIn uses its most recent create attempt. Each automatic cycle sends at most one post when spacing is enabled; high-stipend/deadline priority still determines which candidate goes next. Limits, failures, source freshness, laptop sleep and generation time can delay publication beyond the interval. Missed time slots do not accumulate into a burst. Manual single-video uploads are explicit overrides. Adjust `automation.min_upload_interval_minutes` and `linkedin.min_post_interval_minutes` in `config/shorts.yaml`. Daily caps still apply independently.
+
+## Recovery update — 23 October 2026
+
+The worker task now has a repeating five-minute recovery trigger in addition to login startup, with IgnoreNew preventing overlapping task instances. Startup waits up to 30 seconds for a previous worker to release its OS lock and never starts a duplicate publisher. The laptop must still be awake and logged in. LinkedIn checks its persisted spacing window before calling external APIs, and unresolved Buffer posts are reconciled at most hourly with a persisted timestamp, including failed checks. This prevents a single uncertain post draining the free request budget.
